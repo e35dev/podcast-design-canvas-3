@@ -39,6 +39,14 @@
               <input id="file-host" type="file" accept="video/*" data-file="host" />
             </div>
             <div class="field">
+              <label for="url-host">Or import by link (Riverside, Drive, or any direct video URL)</label>
+              <div class="import-row">
+                <input id="url-host" type="url" data-url="host" placeholder="https://…/clip.webm"
+                       value="https://mdn.github.io/shared-assets/videos/flower.webm" />
+                <button type="button" class="btn import-btn" data-import="host">Import</button>
+              </div>
+            </div>
+            <div class="field">
               <label for="social-host">Social link (used only to label the speaker)</label>
               <input id="social-host" type="url" placeholder="https://x.com/yourhandle" data-social="host" />
             </div>
@@ -55,6 +63,14 @@
               <input id="file-guest1" type="file" accept="video/*" data-file="guest1" />
             </div>
             <div class="field">
+              <label for="url-guest1">Or import by link (Riverside, Drive, or any direct video URL)</label>
+              <div class="import-row">
+                <input id="url-guest1" type="url" data-url="guest1" placeholder="https://…/clip.webm"
+                       value="https://mdn.github.io/shared-assets/videos/sintel-short.webm" />
+                <button type="button" class="btn import-btn" data-import="guest1">Import</button>
+              </div>
+            </div>
+            <div class="field">
               <label for="social-guest1">Social link</label>
               <input id="social-guest1" type="url" placeholder="https://instagram.com/guest" data-social="guest1" />
             </div>
@@ -69,6 +85,13 @@
             <div class="field">
               <label for="file-guest2">Upload synced speaker video</label>
               <input id="file-guest2" type="file" accept="video/*" data-file="guest2" />
+            </div>
+            <div class="field">
+              <label for="url-guest2">Or import by link (Riverside, Drive, or any direct video URL)</label>
+              <div class="import-row">
+                <input id="url-guest2" type="url" data-url="guest2" placeholder="https://…/clip.webm" />
+                <button type="button" class="btn import-btn" data-import="guest2">Import</button>
+              </div>
             </div>
             <div class="field">
               <label for="social-guest2">Social link</label>
@@ -100,9 +123,9 @@
             <button class="btn" id="btnReset" type="button">New episode</button>
           </div>
           <p class="hint">
-            Your uploaded speaker videos compose on a 1280&times;720 canvas as soon as two are added &mdash; no refresh
-            or restart needed. Export records that exact composition (with everyone&rsquo;s audio) as a downloadable
-            video. Enable <em>Full length</em> to render the entire episode.
+            Your speaker videos &mdash; uploaded or imported by link &mdash; compose on a 1280&times;720 canvas as soon
+            as two are added, with no refresh or restart needed. Export records that exact composition (with
+            everyone&rsquo;s audio) as a downloadable video. Enable <em>Full length</em> to render the entire episode.
           </p>
         </div>
 

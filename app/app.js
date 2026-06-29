@@ -40,7 +40,7 @@
   // frame (used only for nicer status text, never to gate the workflow).
   var speakers = {};
   ROLE_KEYS.forEach(function (k) {
-    speakers[k] = { role: k, file: null, url: null, video: null, assigned: false, ready: false, paintedReal: false, loadError: false, social: '', audioSource: null };
+    speakers[k] = { role: k, file: null, url: null, isRemote: false, video: null, assigned: false, ready: false, paintedReal: false, loadError: false, social: '', audioSource: null };
   });
 
   var presetId = PDC.PRESETS[0].id;
@@ -124,17 +124,28 @@
     refreshControls();
   }
 
-  /* ---------- file handling ---------- */
-  function onFileSelected(key, file) {
-    if (!file) return;
+  /* ---------- media loading (shared by upload + link import) ---------- */
+  function shortLabel(s, isRemote) {
+    if (isRemote) {
+      try {
+        var u = new URL(s);
+        return (u.pathname.split('/').filter(Boolean).pop() || u.hostname);
+      } catch (e) { return 'linked video'; }
+    }
+    return s.length > 22 ? s.slice(0, 21) + '…' : s;
+  }
+
+  // The one media-ingest path: a local upload (object URL) or a remote link both
+  // land here and flow into the same preview/export pipeline.
+  function attachMedia(key, src, isRemote, label) {
     var sp = speakers[key];
-    // Tear down any previous media for this bucket.
-    if (sp.url) { try { URL.revokeObjectURL(sp.url); } catch (e) {} }
+    // Tear down any previous media for this bucket (only object URLs get revoked).
+    if (sp.url && !sp.isRemote) { try { URL.revokeObjectURL(sp.url); } catch (e) {} }
     if (sp.video) { try { sp.video.pause(); } catch (e) {} }
     sp.audioSource = null; // a fresh element needs a fresh source node
 
-    sp.file = file;
-    sp.url = URL.createObjectURL(file);
+    sp.url = src;
+    sp.isRemote = isRemote;
     sp.assigned = true;
     sp.ready = false;
     sp.paintedReal = false;
@@ -145,14 +156,15 @@
     v.playsInline = true;
     v.loop = true;           // keep frames flowing for a continuous preview
     v.preload = 'auto';
-    // No crossOrigin: the blob is same-origin, so the canvas is never tainted —
-    // and setting it would make the media fail to load under file:// (opaque origin).
-    v.src = sp.url;
+    // Remote links: request CORS so the canvas stays untainted and export works.
+    // Same-origin object URLs (uploads): do NOT set crossOrigin — it would make
+    // the media fail to load under file:// (opaque origin) and taint nothing anyway.
+    if (isRemote) v.crossOrigin = 'anonymous';
+    v.src = src;
     v.className = 'thumb-video';
     sp.video = v;
 
-    // Show the uploaded clip right in its bucket — direct visual proof the real
-    // file decoded, independent of the composed canvas.
+    // Show the clip right in its bucket — direct visual proof it loaded.
     var thumb = document.querySelector('[data-thumb="' + key + '"]');
     if (thumb) { thumb.innerHTML = ''; thumb.appendChild(v); thumb.hidden = false; }
 
@@ -173,14 +185,30 @@
     v.addEventListener('canplay', markReady);
     v.addEventListener('error', function () {
       sp.loadError = true;
-      setPill(key, 'Unsupported file', 'loading');
+      setPill(key, isRemote ? 'Could not load link' : 'Unsupported file', 'loading');
       updateStatus();
     });
 
     v.play().catch(function () { /* muted autoplay should pass; ignore otherwise */ });
 
-    setPill(key, file.name.length > 22 ? file.name.slice(0, 21) + '…' : file.name, 'loading');
+    setPill(key, label, 'loading');
     updateStatus();
+  }
+
+  function onFileSelected(key, file) {
+    if (!file) return;
+    speakers[key].file = file;
+    attachMedia(key, URL.createObjectURL(file), false, shortLabel(file.name, false));
+  }
+
+  function importFromUrl(key, url) {
+    url = (url || '').trim();
+    if (!url) { setPill(key, 'Enter a link first', 'loading'); return; }
+    if (!/^https?:\/\//i.test(url) && url.indexOf('blob:') !== 0 && url.indexOf('data:') !== 0) {
+      url = 'https://' + url;
+    }
+    speakers[key].file = null;
+    attachMedia(key, url, true, shortLabel(url, true));
   }
 
   /* ---------- canvas composition ---------- */
@@ -203,7 +231,10 @@
 
     var v = sp.video;
     var painted = false;
-    if (v && v.readyState >= 2 && v.videoWidth > 0) {
+    // Draw the frame once metadata is known; once a tile has ever painted a real
+    // frame, keep drawing it through brief readyState dips (loop/seek) so it never
+    // flickers back to the placeholder mid-preview.
+    if (v && v.videoWidth > 0 && (v.readyState >= 2 || sp.paintedReal)) {
       var cr = PDC.coverRect(v.videoWidth, v.videoHeight, rect);
       try {
         ctx.drawImage(v, cr.sx, cr.sy, cr.sw, cr.sh, rect.x, rect.y, rect.w, rect.h);
@@ -486,9 +517,9 @@
   function resetEpisode() {
     ROLE_KEYS.forEach(function (k) {
       var sp = speakers[k];
-      if (sp.url) { try { URL.revokeObjectURL(sp.url); } catch (e) {} }
+      if (sp.url && !sp.isRemote) { try { URL.revokeObjectURL(sp.url); } catch (e) {} }
       if (sp.video) { try { sp.video.pause(); } catch (e) {} }
-      speakers[k] = { role: k, file: null, url: null, video: null, assigned: false, ready: false, paintedReal: false, loadError: false, social: '', audioSource: null };
+      speakers[k] = { role: k, file: null, url: null, isRemote: false, video: null, assigned: false, ready: false, paintedReal: false, loadError: false, social: '', audioSource: null };
       setPill(k, 'No video', '');
       var thumb = document.querySelector('[data-thumb="' + k + '"]');
       if (thumb) { thumb.innerHTML = ''; thumb.hidden = true; }
@@ -514,6 +545,20 @@
         var key = input.getAttribute('data-file');
         var file = input.files && input.files[0];
         if (file) onFileSelected(key, file);
+      });
+    });
+
+    // Import-by-link: click the button or press Enter in the field.
+    $$('[data-import]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-import');
+        var field = document.querySelector('[data-url="' + key + '"]');
+        importFromUrl(key, field ? field.value : '');
+      });
+    });
+    $$('[data-url]').forEach(function (input) {
+      input.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); importFromUrl(input.getAttribute('data-url'), input.value); }
       });
     });
 
