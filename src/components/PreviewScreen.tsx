@@ -49,15 +49,14 @@ export function PreviewScreen() {
     };
   }, [episode, preset]);
 
-  // time ticker
+  // time / export-progress ticker
   useEffect(() => {
-    if (!playing) return;
+    if (!playing && !exporting) return;
     const id = window.setInterval(() => {
       const e = engineRef.current;
-      if (e) {
-        setTime(e.currentTime);
-        if (exporting) setExportProgress(Math.min(1, e.duration ? e.currentTime / e.duration : 0));
-      }
+      if (!e) return;
+      setTime(e.currentTime);
+      if (exporting) setExportProgress(Math.min(1, e.duration ? e.currentTime / e.duration : 0));
     }, 200);
     return () => window.clearInterval(id);
   }, [playing, exporting]);
@@ -66,6 +65,9 @@ export function PreviewScreen() {
     const e = engineRef.current;
     if (!e) return;
     setResult(null);
+    // seek to start so Play works even after a previous playback/export left
+    // the tracks at their end position.
+    e.seek(0);
     await e.play(() => setPlaying(false));
     setPlaying(true);
   };

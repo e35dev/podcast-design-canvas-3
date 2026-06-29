@@ -76,10 +76,28 @@ export function recordEpisode(
       resolve({ blob, url, mimeType, durationMs });
     };
 
+    // Start the recorder BEFORE playback so the first frames/audio are
+    // captured and so a very short clip's 'ended' event cannot fire before
+    // the recorder has started (which would throw InvalidStateError on stop).
+    try {
+      recorder.start(250);
+    } catch (e) {
+      reject(e);
+      return;
+    }
+
     engine
-      .play(() => recorder.stop())
-      .then(() => recorder.start(250))
-      .catch(reject);
+      .play(() => {
+        if (recorder.state !== 'inactive') recorder.stop();
+      })
+      .catch((err) => {
+        try {
+          if (recorder.state !== 'inactive') recorder.stop();
+        } catch {
+          /* noop */
+        }
+        reject(err);
+      });
   });
 }
 

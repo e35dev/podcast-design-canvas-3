@@ -46,7 +46,8 @@ export class EpisodeEngine {
       window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.audioCtx = new Ctor();
     this.mixer = this.audioCtx.createGain();
-    this.mixer.gain.value = 1;
+    // < 1 so that several summed speaker tracks do not clip at the master.
+    this.mixer.gain.value = 0.7;
     this.mixer.connect(this.audioCtx.destination);
     this.streamDest = this.audioCtx.createMediaStreamDestination();
     this.mixer.connect(this.streamDest);
@@ -70,7 +71,10 @@ export class EpisodeEngine {
       const v = document.createElement('video');
       v.src = sp.objectUrl;
       v.crossOrigin = 'anonymous';
-      v.muted = true; // audio is routed via the Web Audio graph
+      // NOTE: do not set muted=true. The audio is tapped by a
+      // MediaElementAudioSourceNode below, which reroutes the element's output
+      // exclusively into the Web Audio graph (no double playback). Setting
+      // muted would silence the graph too, producing a silent export.
       v.playsInline = true;
       v.preload = 'auto';
       this.videos.set(sp.id, v);
