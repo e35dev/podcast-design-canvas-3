@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Podcast Design Canvas</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="top-bar">
+        <div>
+          <p class="eyebrow">Podcast Design Canvas</p>
+          <h1>Episode import to export</h1>
+        </div>
+        <button id="start-episode" class="primary-button" type="button">Start new episode</button>
+      </section>
+
+      <section id="workspace" class="workspace">
+        <div class="panel-stack">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Episode setup</p>
+                <h2>Build the first real import-to-export path</h2>
+              </div>
+              <button id="restart-episode" class="ghost-button" type="button">Start over</button>
+            </div>
+
+            <div class="field-grid">
+              <label class="field-group">
+                <span>Episode title</span>
+                <input id="episode-title" type="text" placeholder="Founder roundtable, episode 01">
+              </label>
+              <label class="field-group">
+                <span>Speaker source files</span>
+                <input id="speaker-files" type="file" accept="video/*" multiple>
+              </label>
+            </div>
+
+            <p id="upload-hint" class="muted-note">Upload at least two separate synced speaker video files.</p>
+            <ul id="upload-list" class="upload-list"></ul>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Speaker context</p>
+                <h2>Social links for each assigned speaker</h2>
+              </div>
+            </div>
+            <div id="social-fields" class="field-grid">
+              <label class="field-group">
+                <span>Host social link</span>
+                <input type="url" name="host" placeholder="https://..." autocomplete="off">
+              </label>
+              <label class="field-group">
+                <span>Guest 1 social link</span>
+                <input type="url" name="guest1" placeholder="https://..." autocomplete="off">
+              </label>
+              <label class="field-group">
+                <span>Guest 2 social link</span>
+                <input type="url" name="guest2" placeholder="https://..." autocomplete="off">
+              </label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Preset choice</p>
+                <h2>Pick a layout and pacing option</h2>
+              </div>
+            </div>
+            <div id="preset-list" class="preset-grid">
+              <label class="preset-card">
+                <input type="radio" name="preset" value="conversation-grid" checked>
+                <span class="preset-title-row">
+                  <strong>Conversation Grid</strong>
+                  <span>Steady</span>
+                </span>
+                <span class="preset-description">Host anchor on the left with both guests stacked on the right.</span>
+              </label>
+              <label class="preset-card">
+                <input type="radio" name="preset" value="spotlight-cycle">
+                <span class="preset-title-row">
+                  <strong>Spotlight Cycle</strong>
+                  <span>Rotate every 8 seconds</span>
+                </span>
+                <span class="preset-description">Rotating spotlight that shifts focus across the assigned speakers.</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Readiness</p>
+                <h2>What is ready to preview</h2>
+              </div>
+            </div>
+            <ul id="ready-list" class="ready-list"></ul>
+            <div class="action-row">
+              <button id="compose-preview" class="primary-button" type="button">Preview episode</button>
+              <p id="status" class="status-text">Ready to start the first real episode workflow.</p>
+            </div>
+          </section>
+        </div>
+
+        <section class="preview-column">
+          <section class="panel preview-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Real media preview</p>
+                <h2>Composed directly from the uploaded videos</h2>
+              </div>
+            </div>
+            <canvas id="preview-canvas" width="1280" height="720" aria-label="Episode preview canvas"></canvas>
+            <div class="action-row preview-actions">
+              <button id="play-preview" class="secondary-button" type="button" disabled>Play from start</button>
+              <button id="pause-preview" class="ghost-button" type="button" disabled>Pause</button>
+              <button id="export-episode" class="primary-button" type="button" disabled>Export long-form video</button>
+            </div>
+            <a id="download-export" class="download-link" hidden>Download export</a>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <div id="preload-stage" hidden></div>
+    <script src="app/model.js"></script>
+    <script src="app/main.js"></script>
+  </body>
+  </html>
