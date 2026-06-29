@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -47,7 +47,7 @@ async function main() {
       }
     });
 
-    const fixtures = await getMediaFixtures(page);
+    const fixtures = getMediaFixtures();
     await navigate(page, pathToFileURL(resolve(root, "index.html")).href);
     await waitFor(() => page.evaluate("document.readyState === 'complete'"), 8000, "file page did not finish loading");
     if (runtimeErrors.length) {
@@ -147,85 +147,19 @@ async function main() {
   }
 }
 
-async function getMediaFixtures(activePage) {
+function getMediaFixtures() {
   if (process.env.PDC_HOST_VIDEO && process.env.PDC_GUEST_VIDEO) {
     return {
       host: resolve(process.env.PDC_HOST_VIDEO),
       guest: resolve(process.env.PDC_GUEST_VIDEO)
     };
   }
-  return createMediaFixtures(activePage);
-}
-
-async function createMediaFixtures(activePage) {
-  await navigate(activePage, "about:blank");
-  const host = await recordFixture(activePage, "#72ddb6", 440);
-  const guest = await recordFixture(activePage, "#f6c85f", 660);
-  const hostPath = resolve(tmpDir, "host.webm");
-  const guestPath = resolve(tmpDir, "guest.webm");
-  writeFileSync(hostPath, Buffer.from(host, "base64"));
-  writeFileSync(guestPath, Buffer.from(guest, "base64"));
-  return { host: hostPath, guest: guestPath };
-}
-
-async function recordFixture(activePage, color, frequency) {
-  return activePage.evaluate(`(async () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 640;
-    canvas.height = 360;
-    const ctx = canvas.getContext('2d');
-    let frame = 0;
-    const draw = () => {
-      ctx.fillStyle = '${color}';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#071013';
-      ctx.fillRect(50 + (frame % 90), 80, 210, 120);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 42px Arial';
-      ctx.fillText('Speaker ${frequency}', 70, 155);
-      frame += 1;
-    };
-    const interval = setInterval(draw, 33);
-    draw();
-
-    const audio = new AudioContext();
-    const oscillator = audio.createOscillator();
-    const gain = audio.createGain();
-    oscillator.frequency.value = ${frequency};
-    gain.gain.value = 0.08;
-    oscillator.connect(gain);
-    const destination = audio.createMediaStreamDestination();
-    gain.connect(destination);
-    oscillator.start();
-
-    const stream = canvas.captureStream(30);
-    destination.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
-    const type = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm';
-    const recorder = new MediaRecorder(stream, { mimeType: type });
-    const chunks = [];
-    recorder.addEventListener('dataavailable', (event) => {
-      if (event.data.size) {
-        chunks.push(event.data);
-      }
-    });
-    const stopped = new Promise((resolve) => recorder.addEventListener('stop', resolve, { once: true }));
-    recorder.start(100);
-    await new Promise((resolve) => setTimeout(resolve, 1800));
-    recorder.stop();
-    await stopped;
-    clearInterval(interval);
-    oscillator.stop();
-    await audio.close();
-    stream.getTracks().forEach((track) => track.stop());
-    const blob = new Blob(chunks, { type });
-    const buffer = await blob.arrayBuffer();
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let index = 0; index < bytes.length; index += 1) {
-      binary += String.fromCharCode(bytes[index]);
-    }
-    return btoa(binary);
-  })()`);
+  const host = resolve(root, "tests", "fixtures", "host-fixture.webm");
+  const guest = resolve(root, "tests", "fixtures", "guest-fixture.webm");
+  if (!existsSync(host) || !existsSync(guest)) {
+    throw new Error("Missing committed media fixtures for rendered upload workflow.");
+  }
+  return { host, guest };
 }
 
 async function assertInitialControls(activePage) {
