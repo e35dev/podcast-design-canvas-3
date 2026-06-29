@@ -19,7 +19,7 @@
 
       <section class="panel" aria-labelledby="speakers-heading">
         <h2 id="speakers-heading">1. Assign speaker videos</h2>
-        <p class="panel-hint">Upload at least two local speaker video files and add their social links.</p>
+        <p class="panel-hint">Upload at least two local speaker video files, or import each from a direct video link, and add their social links.</p>
         <div class="speaker-grid" id="speaker-grid">
           <article class="speaker-card" data-role="host">
             <h3>Host</h3>
@@ -27,6 +27,12 @@
               Video file
               <input type="file" accept="video/*" data-input="file" />
             </label>
+            <p class="field-or">or import from a link</p>
+            <div class="url-import-row">
+              <input type="url" placeholder="https://.../host-fixture.webm" data-input="url" />
+              <button type="button" data-action="import-url">Import from URL</button>
+            </div>
+            <p class="field-hint">Example: https://raw.githubusercontent.com/claytonlin1110/podcast-design-canvas-3/episode-import-to-export-flow-v3/tests/fixtures/host-fixture.webm</p>
             <video class="speaker-preview" data-el="video" muted playsinline preload="auto"></video>
             <label class="field">
               Display name
@@ -45,6 +51,12 @@
               Video file
               <input type="file" accept="video/*" data-input="file" />
             </label>
+            <p class="field-or">or import from a link</p>
+            <div class="url-import-row">
+              <input type="url" placeholder="https://.../guest1-fixture.webm" data-input="url" />
+              <button type="button" data-action="import-url">Import from URL</button>
+            </div>
+            <p class="field-hint">Example: https://raw.githubusercontent.com/claytonlin1110/podcast-design-canvas-3/episode-import-to-export-flow-v3/tests/fixtures/guest1-fixture.webm</p>
             <video class="speaker-preview" data-el="video" muted playsinline preload="auto"></video>
             <label class="field">
               Display name
@@ -63,6 +75,11 @@
               Video file
               <input type="file" accept="video/*" data-input="file" />
             </label>
+            <p class="field-or">or import from a link</p>
+            <div class="url-import-row">
+              <input type="url" placeholder="https://.../video.webm" data-input="url" />
+              <button type="button" data-action="import-url">Import from URL</button>
+            </div>
             <video class="speaker-preview" data-el="video" muted playsinline preload="auto"></video>
             <label class="field">
               Display name

@@ -7,6 +7,7 @@ import {
   computeLayout,
   formatDuration,
   safeDuration,
+  guessFilenameFromUrl,
   type SpeakerState,
   type SpeakerRole,
 } from "./model";
@@ -143,6 +144,35 @@ function handleFileSelected(
   refreshAll();
 }
 
+async function importFromUrl(
+  speaker: SpeakerState,
+  videoEl: HTMLVideoElement,
+  statusEl: HTMLElement,
+  urlInput: HTMLInputElement,
+  importButton: HTMLButtonElement,
+): Promise<void> {
+  const sourceUrl = urlInput.value.trim();
+  if (!sourceUrl) return;
+
+  importButton.disabled = true;
+  statusEl.textContent = `Fetching ${sourceUrl}…`;
+
+  try {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) {
+      throw new Error(`Server responded ${response.status} ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    const file = new File([blob], guessFilenameFromUrl(sourceUrl), { type: blob.type || "video/mp4" });
+    handleFileSelected(speaker, videoEl, statusEl, file);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    statusEl.textContent = `Could not import this URL: ${reason}. Use a direct link to a video file that allows cross-origin access.`;
+  } finally {
+    importButton.disabled = false;
+  }
+}
+
 function wireSpeakerCards(): void {
   document.querySelectorAll<HTMLElement>(".speaker-card").forEach((card) => {
     const role = card.dataset.role as SpeakerRole;
@@ -150,9 +180,11 @@ function wireSpeakerCards(): void {
     const fileInput = card.querySelector<HTMLInputElement>('[data-input="file"]');
     const nameInput = card.querySelector<HTMLInputElement>('[data-input="name"]');
     const socialInput = card.querySelector<HTMLInputElement>('[data-input="social"]');
+    const urlInput = card.querySelector<HTMLInputElement>('[data-input="url"]');
+    const importButton = card.querySelector<HTMLButtonElement>('[data-action="import-url"]');
     const videoEl = card.querySelector<HTMLVideoElement>('[data-el="video"]');
     const statusEl = card.querySelector<HTMLElement>('[data-el="status"]');
-    if (!fileInput || !nameInput || !socialInput || !videoEl || !statusEl) {
+    if (!fileInput || !nameInput || !socialInput || !urlInput || !importButton || !videoEl || !statusEl) {
       throw new Error(`Speaker card for role "${role}" is missing required elements.`);
     }
 
@@ -161,6 +193,17 @@ function wireSpeakerCards(): void {
     fileInput.addEventListener("change", () => {
       const file = fileInput.files && fileInput.files.length > 0 ? fileInput.files[0] : null;
       handleFileSelected(speaker, videoEl, statusEl, file);
+    });
+
+    importButton.addEventListener("click", () => {
+      void importFromUrl(speaker, videoEl, statusEl, urlInput, importButton);
+    });
+
+    urlInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void importFromUrl(speaker, videoEl, statusEl, urlInput, importButton);
+      }
     });
 
     nameInput.addEventListener("input", () => {

@@ -6,6 +6,7 @@ import {
   createInitialSpeakers,
   formatDuration,
   getAssignedSpeakers,
+  guessFilenameFromUrl,
   safeDuration,
   type SpeakerState,
 } from "../src/model";
@@ -148,5 +149,23 @@ describe("formatDuration", () => {
 
   it("shows a dash for unknown duration", () => {
     expect(formatDuration(null)).toBe("—");
+  });
+});
+
+describe("guessFilenameFromUrl", () => {
+  it("uses the last path segment of a valid URL", () => {
+    expect(guessFilenameFromUrl("https://example.com/videos/host-fixture.webm")).toBe("host-fixture.webm");
+  });
+
+  it("decodes percent-encoded characters", () => {
+    expect(guessFilenameFromUrl("https://example.com/my%20video.mp4")).toBe("my video.mp4");
+  });
+
+  it("falls back to a default name when the path has no segments", () => {
+    expect(guessFilenameFromUrl("https://example.com/")).toBe("imported-video");
+  });
+
+  it("falls back to a default name for an unparsable URL", () => {
+    expect(guessFilenameFromUrl("not a url")).toBe("imported-video");
   });
 });

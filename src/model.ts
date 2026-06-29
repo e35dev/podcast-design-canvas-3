@@ -165,6 +165,17 @@ export function computeMaxKnownDuration(speakers: SpeakerState[]): number | null
   return Math.max(...known);
 }
 
+/** Derives a display filename from an imported URL's last path segment, for status text. */
+export function guessFilenameFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const last = parsed.pathname.split("/").filter((segment) => segment.length > 0).pop();
+    return last ? decodeURIComponent(last) : "imported-video";
+  } catch {
+    return "imported-video";
+  }
+}
+
 export function formatDuration(duration: number | null): string {
   if (duration === null) return "—";
   const totalSeconds = Math.round(duration);
