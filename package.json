@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "verify:evidence": "node scripts/verify-evidence.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

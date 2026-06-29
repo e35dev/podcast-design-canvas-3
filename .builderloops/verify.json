@@ -1,6 +1,6 @@
 {
-  "_comment": "Builder Loops verification manifest. install = npm install only (no browser-binary download, which restricted sandboxes block). The evaluator verifies product behavior itself; the acceptance gate here is the deterministic unit/build suite. The Playwright e2e (npm run test:e2e) is available locally and in capable CI but is intentionally not part of the sandbox gate.",
+  "_comment": "Builder Loops verification manifest. install = npm install only (no browser-binary download, which restricted sandboxes block). acceptance = build suite + deterministic validation of the committed real execution evidence (a genuine WebM exported by the running app via MediaRecorder), so the sandbox proves the behavioral path produced real output, not just that the code compiles. See evidence/README.md. The full Playwright e2e (npm run test:e2e) regenerates that evidence in capable environments.",
   "install": "npm install",
   "test": "npm test",
-  "acceptance": "npm run typecheck && npm run lint && npm test && npm run preview-build"
+  "acceptance": "npm run typecheck && npm run lint && npm test && npm run preview-build && npm run verify:evidence"
 }
