@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Podcast Design Canvas</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Podcast Design Canvas</h1>
+        <p class="tagline">Turn synced speaker recordings into a polished, exportable episode.</p>
+        <label class="episode-title-field">
+          Episode title
+          <input id="episode-title" type="text" value="Untitled Episode" />
+        </label>
+      </header>
+
+      <section class="panel" aria-labelledby="speakers-heading">
+        <h2 id="speakers-heading">1. Assign speaker videos</h2>
+        <p class="panel-hint">Upload at least two local speaker video files and add their social links.</p>
+        <div class="speaker-grid" id="speaker-grid">
+          <article class="speaker-card" data-role="host">
+            <h3>Host</h3>
+            <label class="field">
+              Video file
+              <input type="file" accept="video/*" data-input="file" />
+            </label>
+            <video class="speaker-preview" data-el="video" muted playsinline preload="auto"></video>
+            <label class="field">
+              Display name
+              <input type="text" value="Host" data-input="name" />
+            </label>
+            <label class="field">
+              Social link
+              <input type="url" placeholder="https://twitter.com/yourhost" data-input="social" />
+            </label>
+            <p class="speaker-status" data-el="status">No file selected.</p>
+          </article>
+
+          <article class="speaker-card" data-role="guest1">
+            <h3>Guest 1</h3>
+            <label class="field">
+              Video file
+              <input type="file" accept="video/*" data-input="file" />
+            </label>
+            <video class="speaker-preview" data-el="video" muted playsinline preload="auto"></video>
+            <label class="field">
+              Display name
+              <input type="text" value="Guest 1" data-input="name" />
+            </label>
+            <label class="field">
+              Social link
+              <input type="url" placeholder="https://twitter.com/yourguest" data-input="social" />
+            </label>
+            <p class="speaker-status" data-el="status">No file selected.</p>
+          </article>
+
+          <article class="speaker-card" data-role="guest2">
+            <h3>Guest 2</h3>
+            <label class="field">
+              Video file
+              <input type="file" accept="video/*" data-input="file" />
+            </label>
+            <video class="speaker-preview" data-el="video" muted playsinline preload="auto"></video>
+            <label class="field">
+              Display name
+              <input type="text" value="Guest 2" data-input="name" />
+            </label>
+            <label class="field">
+              Social link
+              <input type="url" placeholder="https://twitter.com/yourguest" data-input="social" />
+            </label>
+            <p class="speaker-status" data-el="status">No file selected.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="preset-heading">
+        <h2 id="preset-heading">2. Choose a preset style</h2>
+        <p class="panel-hint">Pick a layout and pacing. You can change this any time before exporting.</p>
+        <div class="preset-grid" id="preset-grid"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="preview-heading">
+        <h2 id="preview-heading">3. Preview the episode</h2>
+        <p class="panel-hint" id="preview-status">Assign at least two speaker videos and choose a preset.</p>
+        <div class="preview-stage">
+          <canvas id="preview-canvas" width="1280" height="720"></canvas>
+        </div>
+        <div class="preview-controls">
+          <button id="play-button" type="button" disabled>Play preview</button>
+          <span id="preview-time" class="time-label">0:00</span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="export-heading">
+        <h2 id="export-heading">4. Export the episode</h2>
+        <button id="export-button" type="button" disabled>Export video</button>
+        <p class="panel-hint" id="export-status">Assign speakers and choose a preset to enable export.</p>
+        <div class="export-result" id="export-result" hidden>
+          <video id="export-video" controls playsinline></video>
+          <a id="download-link" download="episode.webm">Download export</a>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
