@@ -1,0 +1,15 @@
+{
+  "name": "podcast-design-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-serve visual podcast production workspace: import synced speaker videos, assign Host/Guest buckets, add social links, pick a preset, preview, and export a real long-form video.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "node scripts/lint.mjs",
+    "test": "node --test",
+    "preview-build": "node scripts/preview-build.mjs",
+    "verify:rendered": "node scripts/rendered-verify.mjs"
+  },
+  "license": "MIT"
+}
