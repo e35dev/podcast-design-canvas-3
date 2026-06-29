@@ -1,0 +1,5 @@
+{
+  "_comment": "Builder Loops verification manifest. test = unit smoke suite; acceptance = full import-to-export proof with real media fixtures (hard gate).",
+  "test": "npm test",
+  "acceptance": "node scripts/run-acceptance.mjs"
+}

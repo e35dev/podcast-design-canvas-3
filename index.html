@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Podcast Design Canvas</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="top-bar">
+        <div>
+          <p class="eyebrow">Podcast Design Canvas</p>
+          <h1>Episode import to export</h1>
+        </div>
+        <button id="start-episode" class="primary-button" type="button">Start new episode</button>
+      </header>
+
+      <section class="workspace">
+        <div class="panel-stack">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Episode setup</p>
+                <h2>Assign synced local files</h2>
+              </div>
+              <button id="reset-episode" class="ghost-button" type="button">Start over</button>
+            </div>
+
+            <label class="field-group">
+              <span>Episode title</span>
+              <input id="episode-title" type="text" value="Founder roundtable">
+            </label>
+
+            <div class="speaker-slots">
+              <article class="speaker-slot" data-bucket="host">
+                <div class="slot-heading">
+                  <div>
+                    <p class="eyebrow">Required</p>
+                    <h3>Host</h3>
+                  </div>
+                  <span class="slot-state" data-state-for="host">No file</span>
+                </div>
+                <label class="field-group">
+                  <span>Host video file</span>
+                  <input id="file-host" type="file" accept="video/*,video/webm" data-file-for="host">
+                </label>
+                <label class="field-group">
+                  <span>Host social link</span>
+                  <input id="social-host" type="url" placeholder="https://..." data-social-for="host">
+                </label>
+              </article>
+
+              <article class="speaker-slot" data-bucket="guest1">
+                <div class="slot-heading">
+                  <div>
+                    <p class="eyebrow">Required</p>
+                    <h3>Guest 1</h3>
+                  </div>
+                  <span class="slot-state" data-state-for="guest1">No file</span>
+                </div>
+                <label class="field-group">
+                  <span>Guest 1 video file</span>
+                  <input id="file-guest1" type="file" accept="video/*,video/webm" data-file-for="guest1">
+                </label>
+                <label class="field-group">
+                  <span>Guest 1 social link</span>
+                  <input id="social-guest1" type="url" placeholder="https://..." data-social-for="guest1">
+                </label>
+              </article>
+
+              <article class="speaker-slot" data-bucket="guest2">
+                <div class="slot-heading">
+                  <div>
+                    <p class="eyebrow">Optional</p>
+                    <h3>Guest 2</h3>
+                  </div>
+                  <span class="slot-state" data-state-for="guest2">No file</span>
+                </div>
+                <label class="field-group">
+                  <span>Guest 2 video file</span>
+                  <input id="file-guest2" type="file" accept="video/*,video/webm" data-file-for="guest2">
+                </label>
+                <label class="field-group">
+                  <span>Guest 2 social link</span>
+                  <input id="social-guest2" type="url" placeholder="https://..." data-social-for="guest2">
+                </label>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Preset</p>
+                <h2>Choose layout and pacing</h2>
+              </div>
+            </div>
+            <div id="preset-list" class="preset-grid">
+              <label class="preset-card">
+                <input type="radio" name="preset" value="conversation-grid" checked>
+                <span class="preset-title-row">
+                  <strong>Conversation Grid</strong>
+                  <span>Steady</span>
+                </span>
+                <span class="preset-description">Large host frame with guests stacked for long-form discussion.</span>
+              </label>
+              <label class="preset-card">
+                <input type="radio" name="preset" value="spotlight-cycle">
+                <span class="preset-title-row">
+                  <strong>Spotlight Cycle</strong>
+                  <span>Rotate every 4 seconds</span>
+                </span>
+                <span class="preset-description">The main frame rotates between assigned speakers while others remain visible.</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Readiness</p>
+                <h2>Preview checklist</h2>
+              </div>
+            </div>
+            <ul id="ready-list" class="ready-list"></ul>
+            <div class="action-row">
+              <button id="compose-preview" class="primary-button" type="button">Preview episode</button>
+              <p id="status" class="status-text" role="status">Upload Host and Guest 1 videos to begin.</p>
+            </div>
+          </section>
+        </div>
+
+        <section class="preview-column">
+          <section class="panel preview-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Real media preview</p>
+                <h2>Composed from uploaded videos</h2>
+              </div>
+            </div>
+            <div id="native-preview" class="native-preview" aria-live="polite">
+              <div class="preview-placeholder">Uploaded speaker videos appear here after preview.</div>
+            </div>
+            <canvas id="preview-canvas" width="1280" height="720" aria-label="Composed episode canvas"></canvas>
+            <div class="action-row preview-actions">
+              <button id="play-preview" class="secondary-button" type="button" disabled>Play from start</button>
+              <button id="pause-preview" class="ghost-button" type="button" disabled>Pause</button>
+              <button id="export-episode" class="primary-button" type="button" disabled>Export video</button>
+            </div>
+            <a id="download-export" class="download-link" hidden download>Download export</a>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="app/model.js"></script>
+    <script src="app/main.js"></script>
+  </body>
+</html>
