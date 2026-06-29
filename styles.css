@@ -1,0 +1,394 @@
+:root {
+  --bg: #0b1020;
+  --panel: #121a30;
+  --panel-2: #18223d;
+  --line: #243150;
+  --text: #e8eefc;
+  --muted: #9fb0d0;
+  --primary: #6366f1;
+  --primary-2: #818cf8;
+  --accent: #38bdf8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* The hidden attribute must always win over component display rules below
+   (e.g. .download sets display:inline-block, which would otherwise show a
+   [hidden] element). */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: radial-gradient(1200px 600px at 80% -10%, #1b2748, var(--bg));
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.app-header {
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-mark {
+  font-size: 28px;
+  color: var(--primary-2);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: 0.2px;
+}
+
+.tagline {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.layout {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 26px 20px 64px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 22px;
+}
+
+.setup-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.setup-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.section-heading {
+  font-size: 16px;
+  margin: 22px 0 4px;
+}
+
+.section-help {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+input[type="text"] {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 15px;
+}
+
+input[type="text"]:focus {
+  outline: 2px solid var(--primary-2);
+  border-color: transparent;
+}
+
+/* Speaker cards */
+.speakers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .speakers {
+    grid-template-columns: 1fr;
+  }
+}
+
+.speaker-card {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.speaker-card.filled {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.speaker-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.speaker-head .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.speaker-state {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.speaker-state.error {
+  color: #fda4af;
+}
+
+.dropzone {
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.dropzone.drag {
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.dropzone p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.file-btn,
+.capture-btn {
+  cursor: pointer;
+  border-radius: 9px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  background: #1f2a47;
+  color: var(--text);
+}
+
+.file-btn:hover,
+.capture-btn:hover {
+  border-color: var(--primary-2);
+}
+
+.capture-btn {
+  background: transparent;
+}
+
+.social {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Presets */
+.presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .presets {
+    grid-template-columns: 1fr;
+  }
+}
+
+.preset-card {
+  position: relative;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.preset-card input {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.preset-card.selected {
+  border-color: var(--primary-2);
+  box-shadow: 0 0 0 1px var(--primary-2) inset;
+}
+
+.preset-name {
+  font-weight: 600;
+}
+
+.preset-pacing {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.preset-blurb {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Actions */
+.actions {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  font-family: inherit;
+}
+
+.primary,
+.secondary,
+.ghost {
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.primary {
+  background: var(--primary);
+  color: white;
+}
+
+.primary:hover {
+  background: var(--primary-2);
+}
+
+.secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.secondary:hover {
+  border-color: var(--primary-2);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.status {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Preview */
+.preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 12px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.stage {
+  background: #05070f;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+#stage-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+/* Export */
+.export-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+#export-progress {
+  width: 100%;
+  height: 10px;
+}
+
+.download {
+  display: inline-block;
+  background: var(--primary);
+  color: white;
+  text-decoration: none;
+  padding: 11px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.download:hover {
+  background: var(--primary-2);
+}
+
+.export-preview {
+  width: 100%;
+  max-width: 520px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}

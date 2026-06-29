@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Podcast Design Canvas</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">◆</span>
+        <div>
+          <h1>Podcast Design Canvas</h1>
+          <p class="tagline">
+            Turn synced speaker recordings into a polished, publishable episode —
+            no traditional editor.
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <!-- SETUP — every control is rendered up front, never hidden behind state. -->
+      <section id="setup" class="panel setup" aria-label="Episode setup">
+        <div class="setup-top">
+          <h2 class="setup-title">New episode</h2>
+          <button id="btn-new" type="button" class="ghost">Start over</button>
+        </div>
+        <div class="field">
+          <label for="episode-title">Episode title</label>
+          <input
+            id="episode-title"
+            type="text"
+            placeholder="Episode 12 — Building in public"
+            autocomplete="off"
+          />
+        </div>
+
+        <h2 class="section-heading">1 · Add your speaker videos</h2>
+        <p class="section-help">
+          Upload a synced video file for each speaker, or record one live. Assign
+          at least two to build the episode.
+        </p>
+
+        <div class="speakers" id="speakers">
+          <!-- Speaker bucket cards are injected here by app/main.js. The slots
+               exist in the model so the controls are deterministic. -->
+        </div>
+
+        <h2 class="section-heading">2 · Choose a preset look</h2>
+        <p class="section-help">
+          Start from a polished layout and pacing — no manual positioning needed.
+        </p>
+        <div class="presets" id="presets" role="radiogroup" aria-label="Preset style"></div>
+
+        <div class="actions">
+          <button id="btn-preview" type="button" class="primary" disabled>
+            Preview episode
+          </button>
+          <button id="btn-export" type="button" class="secondary" disabled>
+            Export video
+          </button>
+          <p id="setup-status" class="status" role="status">
+            Add at least two speaker videos to preview.
+          </p>
+        </div>
+      </section>
+
+      <!-- PREVIEW — the real uploaded/recorded media composed on the canvas. -->
+      <section id="preview" class="panel preview" aria-label="Episode preview" hidden>
+        <div class="preview-bar">
+          <button id="btn-back" type="button" class="ghost">← Back to setup</button>
+          <div class="preview-actions">
+            <button id="btn-play" type="button" class="secondary">Play from start</button>
+            <button id="btn-export-2" type="button" class="primary">Export video</button>
+          </div>
+        </div>
+        <div class="stage">
+          <canvas id="stage-canvas" width="1280" height="720" aria-label="Episode composition"></canvas>
+        </div>
+        <p id="preview-status" class="status" role="status"></p>
+      </section>
+
+      <!-- EXPORT — a real, downloadable WebM produced from the canvas + audio. -->
+      <section id="export" class="panel export" aria-label="Export" hidden>
+        <h2 class="section-heading">Export</h2>
+        <div class="export-body">
+          <progress id="export-progress" max="100" value="0"></progress>
+          <p id="export-status" class="status" role="status">Preparing export…</p>
+          <a id="download-link" class="download" href="#" download hidden>Download export</a>
+          <video id="export-preview" class="export-preview" controls playsinline hidden></video>
+        </div>
+      </section>
+    </main>
+
+    <!-- Classic scripts only. No type="module" — the app must run from file://
+         where module loading is blocked by CORS. Model loads before main. -->
+    <script src="app/model.js"></script>
+    <script src="app/main.js"></script>
+  </body>
+</html>
