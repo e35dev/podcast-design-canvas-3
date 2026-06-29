@@ -31,7 +31,8 @@
     tracks: speakerRoles.map((role) => ({
       role,
       label: speakerLabels[role],
-      socialLink: ""
+      socialLink: "",
+      loadState: "empty"
     })),
     previewing: false,
     exporting: false,
@@ -100,6 +101,8 @@
             ${renderEmptyState()}
           </div>
 
+          ${renderAcceptancePanel()}
+
           <div class="status-row">
             <div>
               <strong>${workflowStatus()}</strong>
@@ -123,23 +126,44 @@
   }
 
   function renderSpeakerBucket(track) {
-    const fileName = track.file ? track.file.name : "Choose synced video";
     const duration =
       track.video && Number.isFinite(track.video.duration) ? formatDuration(track.video.duration) : "No media yet";
+    const statusLabel =
+      track.loadState === "ready"
+        ? "Ready"
+        : track.loadState === "loading"
+          ? "Loading"
+          : track.loadState === "error"
+            ? "Check file"
+            : "Empty";
+    const statusClass =
+      track.loadState === "ready"
+        ? "ready-pill"
+        : track.loadState === "loading"
+          ? "loading-pill"
+          : track.loadState === "error"
+            ? "error-pill"
+            : "empty-pill";
 
     return `
       <article class="speaker-card">
         <div class="speaker-card__head">
           <div>
-            <h3>${escapeHtml(track.label)}</h3>
-            <p>${escapeHtml(duration)}</p>
+            <h3>${escapeHtml(track.label)} bucket</h3>
+            <p>${track.file ? `Assigned: ${escapeHtml(track.file.name)} - ${escapeHtml(duration)}` : "No synced video assigned yet"}</p>
           </div>
-          <span class="${track.file ? "ready-pill" : "empty-pill"}">${track.file ? "Ready" : "Empty"}</span>
+          <span class="${statusClass}">${statusLabel}</span>
         </div>
         <label class="file-picker">
+          <span>Upload ${escapeHtml(track.label)} synced video</span>
           <input data-action="file" data-role="${track.role}" type="file" accept="video/*" />
-          <span>${escapeHtml(fileName)}</span>
         </label>
+        ${
+          track.objectUrl
+            ? `<video class="bucket-preview" src="${track.objectUrl}" muted playsinline controls preload="metadata"></video>`
+            : `<div class="bucket-preview bucket-preview--empty">Waiting for ${escapeHtml(track.label)} video</div>`
+        }
+        ${track.mediaError ? `<p class="bucket-error">${escapeHtml(track.mediaError)}</p>` : ""}
         <label class="field compact">
           <span>Social link</span>
           <input data-action="social" data-role="${track.role}" type="url" placeholder="https://..." value="${escapeAttribute(track.socialLink)}" />
@@ -184,6 +208,35 @@
         <a class="download-link" href="${state.exportUrl}" download="${escapeAttribute(fileName)}">
           Download WebM
         </a>
+      </div>
+    `;
+  }
+
+  function renderAcceptancePanel() {
+    const tracks = loadedTracksFromState();
+    const readyTracks = tracks.filter((track) => track.loadState === "ready");
+    const hasSocialLinks = tracks.slice(0, 2).every((track) => track.socialLink.trim());
+    const items = [
+      { label: "At least two speaker videos assigned", done: tracks.length >= 2 },
+      { label: "Media metadata loaded for preview/export", done: readyTracks.length >= 2 },
+      { label: "Host and guest social links entered", done: hasSocialLinks },
+      { label: `${currentPresetName()} preset selected`, done: true },
+      { label: state.previewing || state.exportUrl ? "Real media preview started" : "Preview ready after uploads", done: state.previewing || Boolean(state.exportUrl) },
+      { label: state.exportUrl ? "Downloadable WebM export ready" : "Export enabled after media loads", done: Boolean(state.exportUrl) }
+    ];
+
+    return `
+      <div class="acceptance-panel" aria-label="Workflow readiness">
+        ${items
+          .map(
+            (item) => `
+              <div class="acceptance-item ${item.done ? "done" : ""}">
+                <span aria-hidden="true">${item.done ? "OK" : ""}</span>
+                <p>${escapeHtml(item.label)}</p>
+              </div>
+            `
+          )
+          .join("")}
       </div>
     `;
   }
@@ -240,28 +293,36 @@
 
     const objectUrl = URL.createObjectURL(file);
     const video = createPreviewVideo(objectUrl);
+    track.file = file;
+    track.objectUrl = objectUrl;
+    track.video = video;
+    track.loadState = "loading";
+    track.mediaError = undefined;
+    state.exportUrl = undefined;
+    state.exportFileName = undefined;
+    state.error = undefined;
+    render();
 
     try {
       await waitForMetadata(video);
-      track.file = file;
-      track.objectUrl = objectUrl;
-      track.video = video;
+      track.loadState = "ready";
+      track.mediaError = undefined;
       state.error = undefined;
     } catch (error) {
-      URL.revokeObjectURL(objectUrl);
+      track.loadState = "error";
+      track.mediaError = getErrorMessage(error);
       state.error = getErrorMessage(error);
     }
 
-    state.exportUrl = undefined;
-    state.exportFileName = undefined;
     render();
   }
 
   async function startPreview() {
     const tracks = loadedTracksFromState();
+    const readyTracks = tracks.filter((track) => track.loadState === "ready");
 
-    if (tracks.length < 2) {
-      state.error = "Upload at least two synced speaker videos before previewing.";
+    if (readyTracks.length < 2) {
+      state.error = "Upload at least two playable synced speaker videos before previewing.";
       render();
       return;
     }
@@ -287,6 +348,12 @@
 
     if (tracks.length < 2) {
       state.error = "Upload at least two synced speaker videos before exporting.";
+      render();
+      return;
+    }
+
+    if (tracks.filter((track) => track.loadState === "ready").length < 2) {
+      state.error = "Wait for at least two uploaded videos to finish loading before exporting.";
       render();
       return;
     }
@@ -812,11 +879,11 @@
   }
 
   function canPreview() {
-    return hasEnoughTracks(state.tracks) && !state.exporting;
+    return hasEnoughTracks(state.tracks) && loadedTracksFromState().filter((track) => track.loadState === "ready").length >= 2 && !state.exporting;
   }
 
   function canExport() {
-    return hasEnoughTracks(state.tracks) && !state.exporting;
+    return hasEnoughTracks(state.tracks) && loadedTracksFromState().filter((track) => track.loadState === "ready").length >= 2 && !state.exporting;
   }
 
   function workflowStatus() {
@@ -829,7 +896,11 @@
     }
 
     if (loadedTracksFromState().length >= 2) {
-      return "Ready to preview and export.";
+      if (loadedTracksFromState().filter((track) => track.loadState === "ready").length >= 2) {
+        return "Ready to preview and export real uploaded media.";
+      }
+
+      return "Loading uploaded media for preview.";
     }
 
     return "Waiting for synced speaker uploads.";

@@ -150,6 +150,8 @@ h3 {
 }
 
 .ready-pill,
+.loading-pill,
+.error-pill,
 .empty-pill {
   flex: 0 0 auto;
   padding: 5px 8px;
@@ -168,34 +170,60 @@ h3 {
   background: #f6ead8;
 }
 
+.loading-pill {
+  color: #155b75;
+  background: #dff2f8;
+}
+
+.error-pill {
+  color: #842029;
+  background: #f8d7da;
+}
+
 .file-picker {
-  display: block;
-  min-height: 42px;
+  display: grid;
+  gap: 8px;
   cursor: pointer;
 }
 
 .file-picker input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.file-picker span {
-  display: flex;
-  align-items: center;
+  width: 100%;
   min-height: 42px;
-  padding: 0 12px;
-  overflow: hidden;
+  padding: 8px;
   color: #21313d;
   background: #ffffff;
-  border: 1px dashed #aebbc5;
+  border: 1px dashed #8fa0ad;
   border-radius: 6px;
+}
+
+.file-picker > span {
   font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.bucket-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  color: #687681;
+  background: #ffffff;
+  border: 1px solid #d9e0e5;
+  border-radius: 6px;
+}
+
+.bucket-preview--empty {
+  display: grid;
+  place-items: center;
+  min-height: 104px;
+  border-style: dashed;
+  font-size: 0.86rem;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.bucket-error {
+  color: #842029;
+  font-size: 0.84rem;
+  font-weight: 750;
 }
 
 .preset-card {
@@ -285,6 +313,47 @@ h3 {
   background: #dce4e8;
   border: 1px solid #c7d1d8;
   border-radius: 8px;
+}
+
+.acceptance-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.acceptance-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid #cfd8df;
+  border-radius: 6px;
+}
+
+.acceptance-item span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: #5e6b76;
+  background: #eef2f4;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.acceptance-item.done span {
+  color: #ffffff;
+  background: #1f8a70;
+}
+
+.acceptance-item p {
+  color: #42505b;
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.25;
 }
 
 canvas {
@@ -395,6 +464,10 @@ progress {
   .download-panel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .acceptance-panel {
+    grid-template-columns: 1fr;
   }
 
   .toolbar-actions,

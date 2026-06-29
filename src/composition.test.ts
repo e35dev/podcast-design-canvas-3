@@ -53,6 +53,7 @@ function makeTrack(role: LoadedTrack["role"], label: string): LoadedTrack {
     file: new File([""], `${role}.webm`),
     objectUrl: `blob:${role}`,
     socialLink: "",
+    loadState: "ready",
     video: {} as HTMLVideoElement
   };
 }

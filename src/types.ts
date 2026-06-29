@@ -9,6 +9,8 @@ export interface SpeakerTrack {
   objectUrl?: string;
   socialLink: string;
   video?: HTMLVideoElement;
+  loadState: "empty" | "loading" | "ready" | "error";
+  mediaError?: string;
 }
 
 export interface LoadedTrack extends SpeakerTrack {
