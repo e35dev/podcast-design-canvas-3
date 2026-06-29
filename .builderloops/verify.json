@@ -1,0 +1,6 @@
+{
+  "_comment": "Builder Loops verification manifest. The sandbox installs deps then runs these. test = unit suite (store, presets, recorder); acceptance = full verification gating the import -> preset -> preview -> export flow.",
+  "install": "npm install",
+  "test": "npm test",
+  "acceptance": "npm run typecheck && npm run lint && npm test && npm run preview-build"
+}
