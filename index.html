@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Podcast Design Canvas — Episode Studio</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="masthead">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>Podcast Design Canvas</h1>
+          <p>Import synced speaker videos &rarr; preview &rarr; export a polished episode.</p>
+        </div>
+      </div>
+      <div class="episode-title">
+        <label for="episodeTitle">Episode title</label>
+        <input id="episodeTitle" type="text" value="New Podcast Episode" autocomplete="off" />
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- LEFT: setup -->
+      <section aria-label="Episode setup">
+        <div class="card">
+          <h2>1 &middot; Speaker videos</h2>
+
+          <div class="speaker" data-role="host">
+            <div class="row">
+              <span class="role"><span class="dot" style="background:#6ea8fe"></span> Host</span>
+              <span class="pill" data-pill>No video</span>
+            </div>
+            <div class="thumb" data-thumb="host" hidden></div>
+            <div class="field">
+              <label for="file-host">Upload synced speaker video</label>
+              <input id="file-host" type="file" accept="video/*" data-file="host" />
+            </div>
+            <div class="field">
+              <label for="social-host">Social link (used only to label the speaker)</label>
+              <input id="social-host" type="url" placeholder="https://x.com/yourhandle" data-social="host" />
+            </div>
+          </div>
+
+          <div class="speaker" data-role="guest1">
+            <div class="row">
+              <span class="role"><span class="dot" style="background:#f7a072"></span> Guest 1</span>
+              <span class="pill" data-pill>No video</span>
+            </div>
+            <div class="thumb" data-thumb="guest1" hidden></div>
+            <div class="field">
+              <label for="file-guest1">Upload synced speaker video</label>
+              <input id="file-guest1" type="file" accept="video/*" data-file="guest1" />
+            </div>
+            <div class="field">
+              <label for="social-guest1">Social link</label>
+              <input id="social-guest1" type="url" placeholder="https://instagram.com/guest" data-social="guest1" />
+            </div>
+          </div>
+
+          <div class="speaker" data-role="guest2">
+            <div class="row">
+              <span class="role"><span class="dot" style="background:#5fe3a1"></span> Guest 2 <span style="color:var(--muted);font-weight:400">(optional)</span></span>
+              <span class="pill" data-pill>No video</span>
+            </div>
+            <div class="thumb" data-thumb="guest2" hidden></div>
+            <div class="field">
+              <label for="file-guest2">Upload synced speaker video</label>
+              <input id="file-guest2" type="file" accept="video/*" data-file="guest2" />
+            </div>
+            <div class="field">
+              <label for="social-guest2">Social link</label>
+              <input id="social-guest2" type="url" placeholder="https://linkedin.com/in/guest" data-social="guest2" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>2 &middot; Preset style &amp; pacing</h2>
+          <div class="presets" id="presets" role="radiogroup" aria-label="Preset style"></div>
+          <p class="hint">Each preset is a distinct look &mdash; layout, pacing rhythm, and palette &mdash; so every show can feel different.</p>
+        </div>
+      </section>
+
+      <!-- RIGHT: preview + export -->
+      <section class="stage" aria-label="Preview and export">
+        <div class="card">
+          <h2>3 &middot; Live preview</h2>
+          <div class="canvas-wrap">
+            <canvas id="stageCanvas" width="1280" height="720" aria-label="Episode preview"></canvas>
+          </div>
+          <div class="status" id="status" aria-live="polite">
+            <span class="badge"></span><span id="statusText">Add at least two speaker videos to compose your episode.</span>
+          </div>
+          <div class="actions">
+            <button class="btn" id="btnPreview" type="button" disabled>Preview from start</button>
+            <button class="btn primary" id="btnExport" type="button" disabled>Export episode video</button>
+            <button class="btn" id="btnReset" type="button">New episode</button>
+          </div>
+          <p class="hint">
+            Your uploaded speaker videos compose on a 1280&times;720 canvas as soon as two are added &mdash; no refresh
+            or restart needed. Export records that exact composition (with everyone&rsquo;s audio) as a downloadable
+            video. Enable <em>Full length</em> to render the entire episode.
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>4 &middot; Export</h2>
+          <div class="actions" style="margin-bottom:12px">
+            <label class="hint" style="display:flex;align-items:center;gap:8px;margin:0">
+              <input type="checkbox" id="fullLength" /> Full length (render the entire episode &mdash; off renders a quick ~6s preview)
+            </label>
+          </div>
+          <div class="export-out" id="exportOut">
+            <video id="exportPreview" controls playsinline muted></video>
+            <div class="export-meta">
+              <div id="exportInfo">No export yet.</div>
+              <a class="download-link" id="downloadLink" download>Download episode</a>
+            </div>
+          </div>
+          <p class="hint" id="exportHint">Export becomes available once at least two speaker videos are added.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Classic scripts only, no ES modules: the app hydrates identically over
+       file:// and a dev server. logic.js exposes window.PDC; app.js wires the UI. -->
+  <script src="app/logic.js"></script>
+  <script src="app/app.js"></script>
+</body>
+</html>
