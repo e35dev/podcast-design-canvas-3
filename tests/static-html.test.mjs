@@ -20,6 +20,7 @@ test("initial render exposes the complete import to export workflow controls", (
     'id="social-guest2"',
     'value="conversation-grid"',
     'value="spotlight-cycle"',
+    'id="load-sample-media"',
     'id="compose-preview"',
     'id="export-episode"',
     'id="download-export"'

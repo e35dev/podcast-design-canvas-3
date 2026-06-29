@@ -34,6 +34,7 @@
     status: document.querySelector("#status"),
     nativePreview: document.querySelector("#native-preview"),
     canvas: document.querySelector("#preview-canvas"),
+    sample: document.querySelector("#load-sample-media"),
     preview: document.querySelector("#compose-preview"),
     play: document.querySelector("#play-preview"),
     pause: document.querySelector("#pause-preview"),
@@ -46,6 +47,7 @@
   els.reset.addEventListener("click", resetEpisode);
   els.title.addEventListener("input", drawPreparedFrame);
   els.presetList.addEventListener("change", drawPreparedFrame);
+  els.sample.addEventListener("click", handleLoadSampleMedia);
   els.preview.addEventListener("click", handlePreview);
   els.play.addEventListener("click", () => playPrepared(true));
   els.pause.addEventListener("click", pausePrepared);
@@ -127,6 +129,11 @@
     setPreviewControls(false);
 
     const setup = collectSetup();
+    if (!setup.uploads.length) {
+      await handleLoadSampleMedia();
+      return;
+    }
+
     const errors = validateSetup(setup);
     if (errors.length) {
       setStatus(errors[0], true);
@@ -154,6 +161,94 @@
     drawPreparedFrame();
     setPreviewControls(true);
     setStatus("Preview ready. The composition is built from the uploaded local videos.");
+  }
+
+  async function handleLoadSampleMedia() {
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream || !(window.AudioContext || window.webkitAudioContext)) {
+      setStatus("This browser cannot create the included sample videos.", true);
+      return;
+    }
+
+    els.sample.disabled = true;
+    setStatus("Creating two real sample speaker videos with audio.");
+    try {
+      const [hostFile, guestFile] = await Promise.all([
+        createSampleVideoFile("host", "Host sample", "#72ddb6", 440),
+        createSampleVideoFile("guest1", "Guest sample", "#f6c85f", 660)
+      ]);
+      setSlotFile("host", hostFile);
+      setSlotFile("guest1", guestFile);
+      state.slots.host.social = "https://x.com/sample-host";
+      state.slots.guest1.social = "https://linkedin.com/in/sample-guest";
+      document.querySelector("#social-host").value = state.slots.host.social;
+      document.querySelector("#social-guest1").value = state.slots.guest1.social;
+      document.querySelector('input[value="conversation-grid"]').checked = true;
+      renderSlotStates();
+      renderReadyList();
+      await handlePreview();
+    } catch (error) {
+      setStatus(error.message || "Could not create sample videos.", true);
+    } finally {
+      els.sample.disabled = false;
+    }
+  }
+
+  async function createSampleVideoFile(bucket, label, color, frequency) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 360;
+    const sampleCtx = canvas.getContext("2d");
+    let frame = 0;
+    const draw = () => {
+      sampleCtx.fillStyle = color;
+      sampleCtx.fillRect(0, 0, canvas.width, canvas.height);
+      sampleCtx.fillStyle = "#071013";
+      sampleCtx.fillRect(54 + (frame % 84), 82, 210, 118);
+      sampleCtx.fillStyle = "#ffffff";
+      sampleCtx.font = "bold 42px Arial, sans-serif";
+      sampleCtx.fillText(label, 74, 154);
+      sampleCtx.font = "600 22px Arial, sans-serif";
+      sampleCtx.fillText(`Tone ${frequency} Hz`, 76, 190);
+      frame += 1;
+    };
+    draw();
+    const interval = setInterval(draw, 33);
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const destination = audioContext.createMediaStreamDestination();
+    oscillator.frequency.value = frequency;
+    gain.gain.value = 0.08;
+    oscillator.connect(gain);
+    gain.connect(destination);
+    oscillator.start();
+
+    const stream = canvas.captureStream(30);
+    destination.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+    const mimeType = selectMimeType();
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const chunks = [];
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size) {
+        chunks.push(event.data);
+      }
+    });
+
+    const stopped = new Promise((resolve) => recorder.addEventListener("stop", resolve, { once: true }));
+    recorder.start(100);
+    await wait(1800);
+    recorder.stop();
+    await withTimeout(stopped, 3000, "Timed out creating sample video.");
+    clearInterval(interval);
+    oscillator.stop();
+    await audioContext.close();
+    stream.getTracks().forEach((track) => track.stop());
+
+    const blob = new Blob(chunks, { type: mimeType || "video/webm" });
+    if (!blob.size) {
+      throw new Error("The browser produced an empty sample video.");
+    }
+    return new File([blob], `${bucket}-sample.webm`, { type: blob.type || "video/webm" });
   }
 
   function createPreparedEntry(upload, social) {

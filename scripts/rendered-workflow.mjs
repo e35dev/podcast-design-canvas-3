@@ -47,7 +47,10 @@ async function main() {
       }
     });
 
-    const fixtures = await getMediaFixtures(page);
+    const useSampleButton = process.env.PDC_USE_SAMPLE_BUTTON === "1";
+    const useEmptyPreview = process.env.PDC_PREVIEW_EMPTY === "1";
+    const fixtures = useSampleButton || useEmptyPreview ? null : await getMediaFixtures(page);
+
     await navigate(page, pathToFileURL(resolve(root, "index.html")).href);
     await waitFor(() => page.evaluate("document.readyState === 'complete'"), 8000, "file page did not finish loading");
     if (runtimeErrors.length) {
@@ -55,13 +58,18 @@ async function main() {
     }
 
     await assertInitialControls(page);
-    await setFileInput(page, "#file-host", fixtures.host);
-    await setFileInput(page, "#file-guest1", fixtures.guest);
-    await typeValue(page, "#social-host", "https://x.com/show-host");
-    await typeValue(page, "#social-guest1", "https://linkedin.com/in/show-guest");
-    await page.evaluate("document.querySelector('input[value=\"spotlight-cycle\"]').click()");
-
-    await page.evaluate("document.querySelector('#compose-preview').click()");
+    if (useSampleButton) {
+      await page.evaluate("document.querySelector('#load-sample-media').click()");
+    } else if (useEmptyPreview) {
+      await page.evaluate("document.querySelector('#compose-preview').click()");
+    } else {
+      await setFileInput(page, "#file-host", fixtures.host);
+      await setFileInput(page, "#file-guest1", fixtures.guest);
+      await typeValue(page, "#social-host", "https://x.com/show-host");
+      await typeValue(page, "#social-guest1", "https://linkedin.com/in/show-guest");
+      await page.evaluate("document.querySelector('input[value=\"spotlight-cycle\"]').click()");
+      await page.evaluate("document.querySelector('#compose-preview').click()");
+    }
     await waitFor(() => page.evaluate("document.querySelector('#status').textContent.includes('Preview ready')"), 10000, "preview did not become ready");
     const previewProof = await page.evaluate(`(() => {
     const cards = document.querySelectorAll('.native-card video').length;

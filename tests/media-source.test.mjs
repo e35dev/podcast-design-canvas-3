@@ -19,3 +19,11 @@ test("export uses canvas capture, uploaded video capture, and downloadable blob 
   assert.match(source, /new Blob\(chunks/);
   assert.match(source, /els\.download\.href = state\.exportUrl/);
 });
+
+test("visible sample media action uses real MediaRecorder files and the same preview path", () => {
+  assert.match(source, /load-sample-media/);
+  assert.match(source, /createSampleVideoFile/);
+  assert.match(source, /new File\(\[blob\]/);
+  assert.match(source, /if \(!setup\.uploads\.length\)/);
+  assert.match(source, /await handlePreview\(\)/);
+});
