@@ -6,3 +6,12 @@ dist-ssr
 coverage
 .DS_Store
 *.tsbuildinfo
+vite.config.ts.timestamp-*
+
+# Playwright generated artifacts
+tests/fixtures
+tests/screenshots
+test-results
+playwright-report
+blob-report
+playwright/.cache

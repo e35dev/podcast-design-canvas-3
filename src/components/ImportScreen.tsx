@@ -34,7 +34,7 @@ function BucketPicker({
 export function ImportScreen() {
   const fileRef = useRef<HTMLInputElement>(null);
   const episode = useEpisodeStore((s) => s.episode);
-  const startEpisode = useEpisodeStore((s) => s.startEpisode);
+  const setTitle = useEpisodeStore((s) => s.setTitle);
   const addSpeakerFile = useEpisodeStore((s) => s.addSpeakerFile);
   const setSpeakerBucket = useEpisodeStore((s) => s.setSpeakerBucket);
   const setSpeakerName = useEpisodeStore((s) => s.setSpeakerName);
@@ -70,8 +70,8 @@ export function ImportScreen() {
             id="ep-title"
             type="text"
             placeholder="My Podcast — Episode 1"
-            defaultValue={episode?.title}
-            onBlur={(e) => startEpisode(e.target.value)}
+            value={episode?.title ?? ''}
+            onChange={(e) => setTitle(e.target.value)}
             style={{ marginTop: 6 }}
           />
         </div>

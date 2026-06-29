@@ -21,6 +21,18 @@ describe('episode store', () => {
     expect(ep!.presetId).toBeNull();
   });
 
+  it('setTitle updates the title without clearing speakers', () => {
+    const { startEpisode, addSpeakerFile, setTitle } = useEpisodeStore.getState();
+    startEpisode('E');
+    addSpeakerFile(file('a.mp4'));
+    addSpeakerFile(file('b.mp4'));
+    const beforeCount = useEpisodeStore.getState().episode!.speakers.length;
+    setTitle('Renamed Episode');
+    const ep = useEpisodeStore.getState().episode!;
+    expect(ep.title).toBe('Renamed Episode');
+    expect(ep.speakers.length).toBe(beforeCount);
+  });
+
   it('assigns buckets in order host -> guest1 -> guest2 as files are added', () => {
     const { startEpisode, addSpeakerFile } = useEpisodeStore.getState();
     startEpisode('E');

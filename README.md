@@ -125,8 +125,16 @@ social links, pick a preset, preview the composed episode, and click
 npm run typecheck    # tsc -b (type-check the whole project)
 npm run lint         # eslint, no warnings allowed
 npm run test         # vitest run (unit tests)
-npm run preview-build # production build + preview server
+npm run preview-build # production build (one-shot shippability check)
+npm run test:e2e     # Playwright: drives the real import->preset->preview->export flow
 ```
+
+The end-to-end test (`tests/browser-flow.spec.ts`) generates two short, real,
+decodable `.webm` clips in-browser, uploads them, assigns Host/Guest buckets,
+adds social links, picks a preset, verifies the composed preview paints the
+real frames, triggers an export, and asserts a real downloadable video file
+(with real bytes) is produced. It auto-starts and stops a preview server and
+saves screenshots under `tests/screenshots/`.
 
 ### How export works
 

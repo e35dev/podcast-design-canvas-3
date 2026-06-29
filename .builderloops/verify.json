@@ -1,6 +1,6 @@
 {
-  "_comment": "Builder Loops verification manifest. The sandbox installs deps then runs these. test = unit suite (store, presets, recorder); acceptance = full verification gating the import -> preset -> preview -> export flow.",
-  "install": "npm install",
+  "_comment": "Builder Loops verification manifest. The sandbox installs deps, runs the unit suite (test), then runs the acceptance gate which type-checks, lints, builds, runs unit tests, and drives the real import->preset->preview->export flow in a headless browser (Playwright auto-starts/stops the preview server).",
+  "install": "npm install && playwright install chromium",
   "test": "npm test",
-  "acceptance": "npm run typecheck && npm run lint && npm test && npm run preview-build"
+  "acceptance": "npm run typecheck && npm run lint && npm test && npm run test:e2e"
 }

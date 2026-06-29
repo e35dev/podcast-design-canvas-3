@@ -24,6 +24,7 @@ interface EpisodeState {
   error: string | null;
 
   startEpisode: (title: string) => void;
+  setTitle: (title: string) => void;
   addSpeakerFile: (file: File, name?: string) => void;
   setSpeakerBucket: (id: string, bucket: SpeakerBucket) => void;
   setSpeakerName: (id: string, name: string) => void;
@@ -51,6 +52,12 @@ export const useEpisodeStore = create<EpisodeState>((set, get) => ({
       stage: 'import',
       error: null,
     });
+  },
+
+  setTitle: (title) => {
+    const ep = get().episode;
+    if (!ep) return;
+    set({ episode: { ...ep, title } });
   },
 
   addSpeakerFile: (file, name) => {
