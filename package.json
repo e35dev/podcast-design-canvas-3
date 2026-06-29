@@ -1,0 +1,10 @@
+{
+  "name": "podcast-design-canvas-3",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-serve visual podcast production workspace — import synced speaker tracks to a finished exported episode.",
+  "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "preview-build": "node scripts/preview-build.mjs"
+  }
+}

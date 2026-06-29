@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Podcast Design Canvas</title>
+    <link rel="stylesheet" href="app/styles.css" />
+  </head>
+  <body>
+    <main id="app"></main>
+
+    <!-- DOM-free models first (also loadable in Node for tests). -->
+    <script src="app/presets.js"></script>
+    <script src="app/episode.js"></script>
+    <script src="app/export-plan.js"></script>
+    <!-- Browser-only pipeline + UI shell. -->
+    <script src="app/exporter.js"></script>
+    <script src="app/ui.js"></script>
+  </body>
+</html>
