@@ -1,0 +1,20 @@
+{
+  "name": "podcast-design-canvas-3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit && node --check src/standalone.js",
+    "test": "vitest run --config vitest.config.ts",
+    "preview-build": "node scripts/preview-build.mjs",
+    "smoke:file": "node scripts/smoke-file.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}
