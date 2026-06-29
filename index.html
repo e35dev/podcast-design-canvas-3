@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Podcast Design Canvas</title>
-    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
     <main class="app">
@@ -106,6 +106,13 @@
       </section>
     </main>
 
-    <script type="module" src="/src/main.ts"></script>
+    <!--
+      Plain classic script, not type="module": this app must run when index.html is opened
+      directly as a file:// URL with no build step or dev server, and browsers block ES module
+      loading under file:// via CORS. dist/app.bundle.js is a prebuilt, committed, dependency-free
+      IIFE bundle of src/*.ts (see vite.config.ts's lib/iife build + `npm run preview-build`).
+      The TypeScript sources under src/ remain the source of truth for typecheck/lint/test.
+    -->
+    <script src="dist/app.bundle.js"></script>
   </body>
 </html>

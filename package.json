@@ -4,12 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "preview-build": "vite build",
-    "preview": "vite preview"
+    "preview-build": "vite build"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.62.0",
