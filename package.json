@@ -1,0 +1,13 @@
+{
+  "name": "podcast-design-canvas-3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "node scripts/lint.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "preview-build": "node scripts/preview-build.mjs"
+  }
+}
