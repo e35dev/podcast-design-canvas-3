@@ -9,6 +9,7 @@
     "lint": "node scripts/lint.mjs",
     "test": "node --test tests/*.test.mjs",
     "preview-build": "node scripts/preview-build.mjs",
+    "verify:rendered": "node scripts/verify-rendered-preview.mjs",
     "serve": "node scripts/serve.mjs"
   }
 }

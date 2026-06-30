@@ -71,10 +71,16 @@
       const row = document.createElement("div");
       row.className = "bucket" + (m ? " filled" : "");
       row.dataset.bucket = bucket;
-      const status = m ? `${m.name}` : "No file";
-      row.innerHTML =
-        `<span class="bucket-name">${BUCKET_LABELS[bucket]}</span>` +
-        `<span class="bucket-status" data-status="${bucket}">${status}</span>`;
+      const name = document.createElement("span");
+      name.className = "bucket-name";
+      name.textContent = BUCKET_LABELS[bucket];
+
+      const status = document.createElement("span");
+      status.className = "bucket-status";
+      status.dataset.status = bucket;
+      status.textContent = m ? m.name : "No file";
+
+      row.append(name, status);
       if (m) {
         const remove = document.createElement("button");
         remove.type = "button";
