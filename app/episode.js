@@ -1,18 +1,24 @@
 // app/episode.js
 // Pure, DOM-free episode model: which uploaded file is assigned to which speaker
-// bucket, and which preset is selected. Kept free of browser APIs so it can be
-// unit-tested under plain Node (tests/episode.test.mjs) and reused by the UI.
-// Classic script — exposed on window.PDC.episode.
+// bucket, optional social links per speaker, and which preset is selected. Kept
+// free of browser APIs so it can be unit-tested under plain Node (tests/episode.test.mjs)
+// and reused by the UI. Classic script — exposed on window.PDC.episode.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
-  const { SPEAKER_BUCKETS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
+  const { SPEAKER_BUCKETS, BUCKET_LABELS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
+  const { displayNameForSocial } = PDC.social;
 
   function createEpisode(init) {
+    const social = {};
+    SPEAKER_BUCKETS.forEach(function (b) {
+      social[b] = (init && init.social && init.social[b]) || "";
+    });
     return {
       title: (init && init.title) || "Untitled episode",
       // bucket -> { name, size, type } media descriptor (no bytes here; the UI
       // keeps the live <video> element + object URL alongside this model).
       media: {},
+      social: social,
       presetId: DEFAULT_PRESET_ID,
     };
   }
@@ -28,6 +34,19 @@
   function clearMedia(episode, bucket) {
     delete episode.media[bucket];
     return episode;
+  }
+
+  function setSocialLink(episode, bucket, url) {
+    if (!SPEAKER_BUCKETS.includes(bucket)) return episode;
+    if (!episode.social) episode.social = {};
+    episode.social[bucket] = typeof url === "string" ? url.trim() : "";
+    return episode;
+  }
+
+  function speakerLabel(episode, bucket) {
+    const fallback = BUCKET_LABELS[bucket] || bucket;
+    const url = episode.social && episode.social[bucket];
+    return displayNameForSocial(url, fallback);
   }
 
   // Buckets that currently hold media, in canonical speaker order.
@@ -64,6 +83,8 @@
     createEpisode,
     assignMedia,
     clearMedia,
+    setSocialLink,
+    speakerLabel,
     assignedBuckets,
     setPreset,
     canCompose,

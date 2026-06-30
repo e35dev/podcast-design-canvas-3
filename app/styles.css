@@ -85,7 +85,30 @@ body {
 .bucket-name { font-weight: 600; align-self: center; }
 .bucket-status { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
 .bucket.filled .bucket-status { color: var(--ok); }
-.bucket-drop { grid-column: 1 / -1; }
+.bucket-drop,
+.social-label { grid-column: 1 / -1; }
+.social-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.social-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+}
+.social-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 .bucket-drop.drag { border-color: var(--accent); background: rgba(108, 140, 255, 0.08); border-radius: 8px; }
 .upload-label {
   display: inline-flex;

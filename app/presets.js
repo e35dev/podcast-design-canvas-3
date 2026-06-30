@@ -4,9 +4,8 @@
 // Everything is hung off a single global namespace: window.PDC.
 //
 // A preset is a pure description of how the assigned speaker videos are placed
-// on a 16:9 stage. The preview renderer (app/preview.js) reads `slots` to size
-// and position the real <video> elements with CSS percentages — no canvas, so a
-// single screenshot of the running app always shows the real uploaded frames.
+// on a 16:9 stage. The preview renderer (app/preview.js) calls layout(n) and
+// draws each speaker's video frame into the returned percentage rects on canvas.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
 

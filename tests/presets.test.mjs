@@ -47,3 +47,9 @@ test("spotlight preset gives the host the full stage and guests a PiP inset", ()
   assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 100 });
   assert.ok(rects[1].w < 50 && rects[1].h < 50, "guest is a small inset");
 });
+
+test("stack preset gives each speaker a full-width row", () => {
+  const rects = getPreset("stack").layout(2);
+  assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 50 });
+  assert.deepEqual(rects[1], { x: 0, y: 50, w: 100, h: 50 });
+});

@@ -60,3 +60,26 @@ test("setPreset only accepts known presets", () => {
   E.setPreset(ep, "does-not-exist");
   assert.equal(ep.presetId, "spotlight", "invalid preset id is rejected");
 });
+
+test("social links derive speaker labels without losing media on preset switch", () => {
+  const ep = E.createEpisode({});
+  E.assignMedia(ep, "host", media("host.webm"));
+  E.assignMedia(ep, "guest1", media("guest.webm"));
+  E.setSocialLink(ep, "host", "https://x.com/alicehost");
+  E.setSocialLink(ep, "guest1", "https://linkedin.com/in/bobguest");
+  assert.equal(E.speakerLabel(ep, "host"), "Alicehost");
+  assert.equal(E.speakerLabel(ep, "guest1"), "Bobguest");
+  E.setPreset(ep, "stack");
+  assert.equal(ep.presetId, "stack");
+  assert.deepEqual(E.assignedBuckets(ep), ["host", "guest1"]);
+  assert.equal(E.speakerLabel(ep, "host"), "Alicehost");
+  E.setPreset(ep, "spotlight");
+  assert.equal(E.canCompose(ep), true);
+  assert.equal(ep.media.host.name, "host.webm");
+});
+
+test("unknown social buckets are ignored", () => {
+  const ep = E.createEpisode({});
+  E.setSocialLink(ep, "director", "https://x.com/nope");
+  assert.equal(ep.social.director, undefined);
+});

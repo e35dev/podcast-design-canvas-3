@@ -33,6 +33,9 @@ if (/<script[^>]*type=["']module["']/i.test(htmlCode)) {
 if (!htmlCode.includes('data-bucket="host"') || !htmlCode.includes('data-bucket="guest1"')) {
   fail("index.html must declare static host/guest file inputs (not JS-generated)");
 }
+if (!htmlCode.includes('data-social="host"')) {
+  fail("index.html must declare static social link inputs per speaker bucket");
+}
 if (!htmlCode.includes("stage-canvas")) {
   fail("index.html must include the composed preview canvas");
 }

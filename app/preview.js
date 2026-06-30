@@ -5,11 +5,15 @@
 // as media exists so composed pixels are visible even before Play is pressed.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
-  const { getPreset, BUCKET_LABELS } = PDC.presets;
+  const { getPreset } = PDC.presets;
 
   function createPreview(canvasEl) {
     const ctx = canvasEl.getContext("2d");
     const videos = {};
+    const videoHost = document.createElement("div");
+    videoHost.setAttribute("aria-hidden", "true");
+    videoHost.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none";
+    document.body.appendChild(videoHost);
     let playing = false;
     let rafId = 0;
     let episodeRef = null;
@@ -23,7 +27,9 @@
         v.playsInline = true;
         v.setAttribute("playsinline", "");
         v.preload = "auto";
-        v.crossOrigin = "anonymous";
+        v.addEventListener("loadeddata", drawFrame);
+        v.addEventListener("canplay", drawFrame);
+        videoHost.appendChild(v);
         videos[bucket] = v;
       }
       return v;
@@ -36,6 +42,19 @@
       v.dataset.objectUrl = url;
       v.src = url;
       v.load();
+      v.addEventListener(
+        "loadeddata",
+        function seekFirstFrame() {
+          v.removeEventListener("loadeddata", seekFirstFrame);
+          try {
+            if (v.currentTime === 0) v.currentTime = 0.001;
+          } catch (e) {
+            /* not seekable yet */
+          }
+          drawFrame();
+        },
+        { once: true },
+      );
       const p = v.play();
       if (p && typeof p.catch === "function") p.catch(function () {});
       return v;
@@ -43,8 +62,16 @@
 
     function clear(bucket) {
       const v = videos[bucket];
-      if (v && v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
+      if (v) {
+        if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
+        v.remove();
+      }
       delete videos[bucket];
+    }
+
+    function speakerLabel(bucket) {
+      if (!episodeRef) return bucket;
+      return PDC.episode.speakerLabel(episodeRef, bucket);
     }
 
     function drawFrame() {
@@ -69,7 +96,7 @@
         ctx.fillStyle = "#000";
         ctx.fillRect(x, y, rw, rh);
 
-        if (v && v.readyState >= 2 && v.videoWidth > 0) {
+        if (v && v.videoWidth > 0) {
           const scale = Math.max(rw / v.videoWidth, rh / v.videoHeight);
           const dw = v.videoWidth * scale;
           const dh = v.videoHeight * scale;
@@ -78,11 +105,14 @@
           ctx.drawImage(v, dx, dy, dw, dh);
         }
 
-        ctx.fillStyle = "rgba(8,10,16,0.72)";
-        ctx.fillRect(x + 8, y + rh - 28, 90, 22);
-        ctx.fillStyle = "#fff";
-        ctx.font = "600 14px system-ui, sans-serif";
-        ctx.fillText(BUCKET_LABELS[bucket] || bucket, x + 14, y + rh - 12);
+        const label = speakerLabel(bucket);
+        if (label) {
+          ctx.fillStyle = "rgba(8,10,16,0.72)";
+          ctx.fillRect(x + 8, y + rh - 28, Math.min(rw - 16, label.length * 9 + 20), 22);
+          ctx.fillStyle = "#fff";
+          ctx.font = "600 14px system-ui, sans-serif";
+          ctx.fillText(label, x + 14, y + rh - 12);
+        }
       });
 
       canvasEl.dataset.preset = preset.id;

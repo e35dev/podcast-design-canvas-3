@@ -5,7 +5,7 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, canCompose, readinessReason } = PDC.episode;
+  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerLabel, canCompose, readinessReason } = PDC.episode;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -28,6 +28,8 @@
     const m = episode.media[bucket];
     const status = row.querySelector('[data-status="' + bucket + '"]');
     if (status) status.textContent = m ? m.name : "No file";
+    const nameEl = row.querySelector(".bucket-name");
+    if (nameEl) nameEl.textContent = speakerLabel(episode, bucket);
     row.classList.toggle("filled", !!m);
   }
 
@@ -61,6 +63,17 @@
     }
     input.addEventListener("change", handle);
     input.addEventListener("input", handle);
+  });
+
+  // --- Social link inputs ---------------------------------------------------
+  document.querySelectorAll("input[data-social]").forEach(function (input) {
+    const bucket = input.getAttribute("data-social");
+    input.addEventListener("input", function () {
+      setSocialLink(episode, bucket, input.value);
+      updateBucketRow(bucket);
+      if (canCompose(episode)) preview.render(episode);
+      refresh();
+    });
   });
 
   // --- Drag-and-drop onto each bucket --------------------------------------
@@ -100,7 +113,7 @@
         c.classList.toggle("selected", on);
         c.setAttribute("aria-pressed", String(on));
       });
-      if (canCompose(episode)) preview.render(episode);
+      preview.render(episode);
       refresh();
     });
     presetsEl.appendChild(btn);

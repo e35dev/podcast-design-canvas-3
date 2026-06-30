@@ -16,7 +16,7 @@
     <main class="layout">
       <section class="panel setup" aria-label="Episode setup">
         <h2 class="step-title"><span class="num">1</span> Upload speaker videos</h2>
-        <p class="hint">Upload a local video for each speaker. Add at least Host and Guest 1 to compose a preview.</p>
+        <p class="hint">Upload a local video for each speaker and add a social link so the preview shows derived names. Add at least Host and Guest 1 to compose a preview.</p>
 
         <!-- File inputs live in static HTML so automation can attach local videos
              without opening a native picker. Each bucket keeps the same input
@@ -31,6 +31,10 @@
                 <input type="file" data-role="file" data-bucket="host" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" />
               </label>
             </div>
+            <label class="social-label">
+              Social link
+              <input type="url" class="social-input" data-social="host" placeholder="https://x.com/alicehost" autocomplete="off" />
+            </label>
           </div>
           <div class="bucket" data-bucket="guest1">
             <span class="bucket-name">Guest 1</span>
@@ -41,6 +45,10 @@
                 <input type="file" data-role="file" data-bucket="guest1" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" />
               </label>
             </div>
+            <label class="social-label">
+              Social link
+              <input type="url" class="social-input" data-social="guest1" placeholder="https://linkedin.com/in/bobguest" autocomplete="off" />
+            </label>
           </div>
           <div class="bucket" data-bucket="guest2">
             <span class="bucket-name">Guest 2</span>
@@ -51,6 +59,10 @@
                 <input type="file" data-role="file" data-bucket="guest2" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" />
               </label>
             </div>
+            <label class="social-label">
+              Social link
+              <input type="url" class="social-input" data-social="guest2" placeholder="https://instagram.com/guesttwo" autocomplete="off" />
+            </label>
           </div>
         </div>
 
@@ -78,6 +90,7 @@
     </main>
 
     <script src="app/presets.js"></script>
+    <script src="app/social.js"></script>
     <script src="app/episode.js"></script>
     <script src="app/preview.js"></script>
     <script src="app/ui.js"></script>
