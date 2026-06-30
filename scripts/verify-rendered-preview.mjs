@@ -1,7 +1,8 @@
 // scripts/verify-rendered-preview.mjs
-// Drives the shipped app in headless Chrome and proves issue #41: upload Host +
-// Guest videos, confirm nonblank decoded pixels, and visibly recompose across
-// Split, Stack, and Spotlight without losing uploaded media.
+// Drives the shipped app in headless Chrome and proves issue #58: upload Host +
+// Guest 1 + Guest 2 videos, confirm nonblank decoded pixels, and visibly
+// recompose across Split, Stack, and Spotlight without losing uploaded media,
+// social context, playback state, or export readiness.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -184,14 +185,17 @@ const browserExpression = `
   await waitFor(() => document.querySelector("#stage-canvas"), "composed preview canvas should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="guest1"]'), "Guest 1 upload control should exist");
+  await waitFor(() => document.querySelector('[data-file-bucket="guest2"]'), "Guest 2 upload control should exist");
   await waitFor(() => document.querySelector('[data-link-bucket="host"]'), "Host social link input should exist");
+  await waitFor(() => document.querySelector('[data-link-bucket="guest2"]'), "Guest 2 social link input should exist");
   await waitFor(() => document.querySelector("#play") && document.querySelector("#play").disabled, "play should start disabled before uploads");
 
   function layoutSignature() {
     const presetId = document.querySelector("#stage-canvas").dataset.preset;
     const preset = window.PDC.presets.getPreset(presetId);
-    return preset.layout(2).map((rect, i) => ({
-      speaker: i === 0 ? "host" : "guest1",
+    const speakerNames = ["host", "guest1", "guest2"];
+    return preset.layout(3).map((rect, i) => ({
+      speaker: speakerNames[i] || "speaker" + i,
       left: rect.x,
       top: rect.y,
       width: rect.w,
@@ -216,6 +220,33 @@ const browserExpression = `
     return pct;
   }
 
+  function regionLitPct(rect) {
+    const c = document.getElementById("stage-canvas");
+    const ctx = c.getContext("2d");
+    const x = Math.max(0, Math.floor((rect.left / 100) * c.width));
+    const y = Math.max(0, Math.floor((rect.top / 100) * c.height));
+    const width = Math.max(1, Math.floor((rect.width / 100) * c.width));
+    const height = Math.max(1, Math.floor((rect.height / 100) * c.height));
+    const data = ctx.getImageData(x, y, width, height).data;
+    let lit = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 14 || data[i + 1] > 14 || data[i + 2] > 14) lit++;
+    }
+    return Math.round((lit / (data.length / 4)) * 100);
+  }
+
+  function expectRegionVisible(label, rect, minimum) {
+    const min = Number.isFinite(minimum) ? minimum : 1;
+    const pct = regionLitPct(rect);
+    assert(pct >= min, label + ": speaker region should remain visibly nonblank (" + pct + "%)");
+    return pct;
+  }
+
+  function approxEquals(value, expected, tolerance, label) {
+    const tol = Number.isFinite(tolerance) ? tolerance : 0.01;
+    assert(Math.abs(value - expected) <= tol, label + " expected " + expected + " got " + value);
+  }
+
   function hiddenVideos() {
     return [...document.querySelectorAll("video[data-speaker]")];
   }
@@ -227,7 +258,8 @@ const browserExpression = `
 
   const hostName = "<img src=x onerror=document.body.dataset.injected=1>.webm";
   const host = await makeVideo(hostName, "#b91c1c");
-  const guest = await makeVideo("guest.webm", "#047857");
+  const guest1 = await makeVideo("guest1.webm", "#047857");
+  const guest2 = await makeVideo("guest2.webm", "#1d4ed8");
 
   function uploadTo(input, file) {
     const dataTransfer = new DataTransfer();
@@ -238,11 +270,13 @@ const browserExpression = `
 
   uploadTo(document.querySelector('[data-file-bucket="host"]'), host);
   await sleep(100);
-  uploadTo(document.querySelector('[data-file-bucket="guest1"]'), guest);
+  uploadTo(document.querySelector('[data-file-bucket="guest1"]'), guest1);
+  await sleep(100);
+  uploadTo(document.querySelector('[data-file-bucket="guest2"]'), guest2);
 
-  await sleep(1200);
+  await sleep(1600);
   const videos = hiddenVideos();
-  assert(videos.length === 2, "two hidden decoder videos should exist after upload");
+  assert(videos.length === 3, "three hidden decoder videos should exist after upload");
   await Promise.all(
     videos.map((video) =>
       video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
@@ -258,26 +292,34 @@ const browserExpression = `
   }
   typeSocial("host", "https://x.com/hostperson");
   typeSocial("guest1", "https://x.com/guestperson");
+  typeSocial("guest2", "https://x.com/guest2person");
   await sleep(300);
   assert(document.querySelector('.bucket[data-bucket="host"] .bucket-name').textContent === "hostperson");
   assert(document.querySelector('.bucket[data-bucket="guest1"] .bucket-name').textContent === "guestperson");
+  assert(document.querySelector('.bucket[data-bucket="guest2"] .bucket-name').textContent === "guest2person");
+  assert(document.querySelector('[data-derived="host"]').textContent === "Shown as: hostperson");
+  assert(document.querySelector('[data-derived="guest1"]').textContent === "Shown as: guestperson");
+  assert(document.querySelector('[data-derived="guest2"]').textContent === "Shown as: guest2person");
 
   const hostStatus = document.querySelector('[data-status="host"]');
   const guestStatus = document.querySelector('[data-status="guest1"]');
+  const guest2Status = document.querySelector('[data-status="guest2"]');
   assert(hostStatus && hostStatus.textContent === hostName, "host bucket should show uploaded filename as text");
   assert(hostStatus.innerHTML.includes("&lt;img"), "host filename markup should be escaped");
   assert(document.body.dataset.injected !== "1", "host filename must not execute markup");
-  assert(guestStatus && guestStatus.textContent === "guest.webm", "guest bucket should show uploaded filename");
-  assert(document.querySelectorAll(".bucket.filled").length === 2, "two buckets should be filled");
+  assert(document.querySelector('[data-link-bucket="host"]').value === "https://x.com/hostperson", "host social link should persist");
+  assert(document.querySelector('[data-link-bucket="guest1"]').value === "https://x.com/guestperson", "guest1 social link should persist");
+  assert(guestStatus && guestStatus.textContent === "guest1.webm", "guest1 bucket should show uploaded filename");
+  assert(guest2Status && guest2Status.textContent === "guest2.webm", "guest2 bucket should show uploaded filename");
+  assert(document.querySelector('[data-link-bucket="guest2"]').value === "https://x.com/guest2person", "guest2 social link should persist");
+  assert(document.querySelectorAll(".bucket.filled").length === 3, "three buckets should be filled");
 
   const playButton = document.querySelector("#play");
   assert(!playButton.disabled, "play control should be reachable after uploads");
-  if (playButton.textContent.includes("Pause")) {
-    playButton.click();
-    await sleep(150);
-  }
+  if (playButton.textContent.includes("Pause")) playButton.click();
   playButton.click();
   await sleep(700);
+  assert(playButton.textContent.includes("Pause"), "preview should be in play state after pressing Play");
 
   const beforeSwitch = videos.map((video) => ({
     speaker: video.dataset.speaker,
@@ -291,35 +333,64 @@ const browserExpression = `
   assert(beforeSwitch.every((item) => item.srcIsBlob), "videos should be backed by uploaded blob URLs");
   assert(beforeSwitch.every((item) => item.width > 0 && item.height > 0), "videos should decode real dimensions");
   assert(beforeSwitch.every((item) => !item.paused), "videos should be playing after Play click");
-  assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "videos should start in sync");
+  assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "host and guest1 should start in sync");
+  assert(Math.abs(beforeSwitch[1].time - beforeSwitch[2].time) < 0.25, "guest1 and guest2 should start in sync");
   assertCanvasVisible("split preset");
 
   const splitLayout = layoutSignature();
-  assert(splitLayout.length === 2, "split should lay out two speakers");
-  assert(splitLayout[0].left === 0 && splitLayout[1].left === 50, "split should place speakers side by side");
+  const splitLitByRegion = splitLayout.map((layout, index) => expectRegionVisible("split region " + (index + 1), layout, 5));
+  assert(splitLayout.length === 3, "split should place three speakers");
+  assert(splitLayout[0].left === 0 && splitLayout[1].left === 50 && splitLayout[2].left === 50, "split should keep host in left and guests in right stack");
+  assert(splitLayout[1].top === 0 && splitLayout[2].top === 50, "split should stack both guests when 3 speakers");
 
   await clickPreset("stack");
   assert(document.querySelector("#stage-canvas").dataset.preset === "stack", "preset switch should update the canvas to stack");
   const stackLayout = layoutSignature();
-  assert(stackLayout[0].top === 0 && stackLayout[1].top === 50, "stack should place speakers in rows");
+  const stackLitByRegion = stackLayout.map((layout, index) => expectRegionVisible("stack region " + (index + 1), layout, 2));
+  assert(stackLayout.length === 3, "stack should place three speakers");
+  assert(stackLayout[0].left === 0 && stackLayout[1].left === 0 && stackLayout[2].left === 0, "stack should keep all regions full width");
+  approxEquals(stackLayout[0].top, 0, 0.001, "stack row 1 top");
+  approxEquals(stackLayout[1].top, 33.333333333333336, 0.02, "stack row 2 top");
+  approxEquals(stackLayout[2].top, 66.66666666666667, 0.02, "stack row 3 top");
   assert(JSON.stringify(splitLayout) !== JSON.stringify(stackLayout), "stack layout should differ from split");
+  assert(playButton.textContent.includes("Pause"), "play state should stay playing when switching split -> stack");
+  assert(!document.querySelector("#export").disabled, "export should stay enabled while composed");
   assertCanvasVisible("stack preset");
 
   await clickPreset("spotlight");
   assert(document.querySelector("#stage-canvas").dataset.preset === "spotlight", "preset switch should update the canvas to spotlight");
   const spotlightLayout = layoutSignature();
   assert(spotlightLayout[0].width === 100 && spotlightLayout[0].height === 100, "spotlight host should fill the stage");
-  assert(spotlightLayout[1].width < 50 && spotlightLayout[1].height < 50, "spotlight guest should be a PiP inset");
+  assert(spotlightLayout.length === 3, "spotlight should include three speakers");
+  assert(spotlightLayout[1].width < 50 && spotlightLayout[1].height < 50, "spotlight guest1 should be a PiP inset");
+  assert(spotlightLayout[2].width < 50 && spotlightLayout[2].height < 50, "spotlight guest2 should be a PiP inset");
+  assert(spotlightLayout[2].top < spotlightLayout[1].top, "spotlight guest2 should stack above guest1");
+  const spotlightHost = expectRegionVisible("spotlight host", spotlightLayout[0], 35);
+  const spotlightGuest1 = expectRegionVisible("spotlight guest1", spotlightLayout[1], 1);
+  const spotlightGuest2 = expectRegionVisible("spotlight guest2", spotlightLayout[2], 1);
   assert(JSON.stringify(stackLayout) !== JSON.stringify(spotlightLayout), "spotlight layout should differ from stack");
+  assert(playButton.textContent.includes("Pause"), "play state should stay playing when switching stack -> spotlight");
   const spotlightLit = assertCanvasVisible("spotlight preset");
 
   assert(hostStatus.textContent === hostName, "host filename should survive preset cycling");
-  assert(guestStatus.textContent === "guest.webm", "guest filename should survive preset cycling");
+  assert(guestStatus.textContent === "guest1.webm", "guest1 filename should survive preset cycling");
+  assert(guest2Status.textContent === "guest2.webm", "guest2 filename should survive preset cycling");
+  assert(document.querySelector('[data-derived="guest2"]').textContent === "Shown as: guest2person", "guest2 derived name should survive preset cycling");
+  playButton.click();
+  await sleep(150);
+  assert(playButton.textContent.includes("Play"), "pressing pause should transition to paused");
+  await clickPreset("split");
+  assert(playButton.textContent.includes("Play"), "paused state should survive split -> split");
 
   return {
     readiness: document.querySelector("#readiness").textContent,
     filledBuckets: [...document.querySelectorAll(".bucket.filled")].map((bucket) => bucket.dataset.bucket),
     beforeSwitch,
+    regionLighting: {
+      split: splitLitByRegion,
+      stack: stackLitByRegion,
+      spotlight: [spotlightHost, spotlightGuest1, spotlightGuest2],
+    },
     layouts: { split: splitLayout, stack: stackLayout, spotlight: spotlightLayout },
     canvasLitPct: spotlightLit,
     afterSpotlight: hiddenVideos().map((video) => ({

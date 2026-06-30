@@ -74,9 +74,10 @@
     input.addEventListener("input", function () {
       setSocialLink(episode, bucket, input.value);
       updateBucketRow(bucket);
+      const wasPlaying = preview.isPlaying();
       if (canCompose(episode)) {
         preview.render(episode);
-        preview.play();
+        if (wasPlaying) preview.play();
       }
       refresh();
     });
@@ -92,13 +93,14 @@
     btn.innerHTML = "<strong>" + p.name + "</strong><span>" + p.description + "</span>";
     btn.addEventListener("click", function () {
       setPreset(episode, p.id);
+      const wasPlaying = preview.isPlaying();
       Array.prototype.forEach.call(presetsEl.children, function (c) {
         const on = c.dataset.preset === p.id;
         c.classList.toggle("selected", on);
         c.setAttribute("aria-pressed", String(on));
       });
       preview.render(episode);
-      if (canCompose(episode)) preview.play();
+      if (canCompose(episode) && wasPlaying) preview.play();
       refresh();
     });
     presetsEl.appendChild(btn);
@@ -124,6 +126,7 @@
     const btn = $("export");
     btn.disabled = true;
     btn.textContent = "⏳ Exporting…";
+    const wasPlaying = preview.isPlaying();
     preview.play(); // ensure the canvas is composing live frames while we capture
     $("export-progress").hidden = false;
     $("export-result").hidden = true;
@@ -155,6 +158,9 @@
     } finally {
       btn.disabled = !canCompose(episode);
       btn.textContent = "⬇ Export video";
+      if (!wasPlaying) {
+        preview.pause();
+      }
     }
   });
 

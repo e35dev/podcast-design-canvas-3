@@ -48,6 +48,28 @@ test("spotlight preset gives the host the full stage and guests a PiP inset", ()
   assert.ok(rects[1].w < 50 && rects[1].h < 50, "guest is a small inset");
 });
 
+test("split preset lays out three speakers with Host on the left and guests stacked on right", () => {
+  const rects = getPreset("split").layout(3);
+  assert.deepEqual(rects[0], { x: 0, y: 0, w: 50, h: 100 });
+  assert.deepEqual(rects[1], { x: 50, y: 0, w: 50, h: 50 });
+  assert.deepEqual(rects[2], { x: 50, y: 50, w: 50, h: 50 });
+});
+
+test("spotlight preset keeps the host primary and two PiP guests for three speakers", () => {
+  const rects = getPreset("spotlight").layout(3);
+  assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 100 });
+  assert.ok(rects[1].w < 50 && rects[1].h < 50, "guest1 should be inset");
+  assert.ok(rects[2].w < 50 && rects[2].h < 50, "guest2 should be inset");
+  assert(rects[2].y < rects[1].y, "guest2 should stack above guest1 with fixed inset order");
+});
+
+test("stack preset keeps three equal rows for 3 speakers", () => {
+  const rects = getPreset("stack").layout(3);
+  assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 33.333333333333336 });
+  assert.ok(Math.abs(rects[1].y - 33.333333333333336) < 1e-9);
+  assert.ok(Math.abs(rects[2].y - 66.66666666666667) < 1e-9);
+});
+
 test("stack preset gives each speaker a full-width row", () => {
   const rects = getPreset("stack").layout(2);
   assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 50 });
