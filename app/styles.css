@@ -245,6 +245,14 @@ body {
 .customize-edit[hidden] { display: none; }
 .customize input { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border, #2a3550); background: #0c1120; color: #fff; }
 
+.audio-balance { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.audio-balance button {
+  padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border, #2a3550);
+  background: #121a2e; color: #fff; cursor: pointer; font: inherit;
+}
+.audio-balance button:disabled { opacity: 0.45; cursor: not-allowed; }
+.audio-balance-status { color: var(--muted); font-size: 12px; }
+
 /* Click-based move/resize controls inside each editor frame */
 .edit-frame-tools {
   position: absolute; top: 2px; right: 2px; display: grid;

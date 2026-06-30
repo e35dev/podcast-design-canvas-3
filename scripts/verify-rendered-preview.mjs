@@ -171,8 +171,6 @@ const browserExpression = `
     return new File(chunks, name, { type: "video/webm" });
   }
 
-  assert(window.PDC, "PDC namespace should load");
-
   const waitFor = async (fn, label) => {
     for (let i = 0; i < 120; i++) {
       if (fn()) return;
@@ -181,6 +179,7 @@ const browserExpression = `
     throw new Error(label);
   };
 
+  await waitFor(() => window.PDC, "PDC namespace");
   await waitFor(() => window.PDC && window.PDC.episode, "PDC episode API should load");
   await waitFor(() => document.querySelector("#stage-canvas"), "composed preview canvas should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");

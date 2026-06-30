@@ -73,6 +73,12 @@
       v.dataset.objectUrl = url;
       v.src = url;
       v.load();
+      // Wire this speaker into the shared audio mixer (single source owner). The
+      // AudioContext stays suspended until the user balances/plays, so this does
+      // not violate autoplay policy and does not change preview rendering.
+      if (PDC.audio) {
+        try { PDC.audio.attach(bucket, v); } catch (e) {}
+      }
       v.addEventListener(
         "loadeddata",
         function seekFirstFrame() {

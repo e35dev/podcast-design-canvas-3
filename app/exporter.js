@@ -34,11 +34,21 @@
     // opts.maxSeconds is an explicit override only (not a default cap).
     const recordSeconds = Math.max(1, opts.maxSeconds || longest || 3);
 
-    // Best-effort: mix each speaker's audio into one track.
+    // Mix the speakers' audio into one track. PDC.audio is the SINGLE owner of
+    // every MediaElementSource (a <video> can only be tapped once), so reuse its
+    // already-leveled master graph rather than tapping the elements again here.
     let audioTracks = [];
     let audioCtx = null;
+    if (PDC.audio && PDC.audio.recordingStream) {
+      try {
+        await PDC.audio.resume();
+        const stream = PDC.audio.recordingStream();
+        if (stream) audioTracks = stream.getAudioTracks();
+      } catch (e) { audioTracks = []; }
+    }
+    // Fallback only if the shared mixer is unavailable (e.g. PDC.audio missing).
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC && vids.length) {
+    if (!audioTracks.length && AC && vids.length) {
       try {
         audioCtx = new AC();
         if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch (e) {} }

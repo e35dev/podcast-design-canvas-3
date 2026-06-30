@@ -209,6 +209,40 @@
     $("mute").textContent = next ? "🔊 Sound on" : "🔇 Muted";
   });
 
+  // Creator-facing automatic speaker leveling. Adjusts only the shared mixer's
+  // per-speaker gains — uploads, preset, and template selection are untouched.
+  function fmtLevels(levels) {
+    return Object.keys(levels || {})
+      .map(function (b) {
+        return speakerName(episode, b) + " " + levels[b].toFixed(3);
+      })
+      .join(", ");
+  }
+  $("balance-audio").addEventListener("click", function () {
+    if (!PDC.audio) return;
+    const btn = $("balance-audio");
+    const status = $("balance-status");
+    btn.disabled = true;
+    status.textContent = "Measuring…";
+    PDC.audio.resume().then(function () {
+      // Let the analysers see a little real audio before measuring/leveling.
+      setTimeout(function () {
+        const r = PDC.audio.applyLeveling();
+        // Show the LEVELING EFFECT: each speaker's input loudness and its
+        // gain-adjusted (leveled) loudness converging to the shared target.
+        const parts = Object.keys(r.before).map(function (b) {
+          const leveled = (r.before[b] || 0) * (r.gains[b] || 1);
+          return speakerName(episode, b) + " " + r.before[b].toFixed(3) +
+            "→" + leveled.toFixed(3) + " (×" + (r.gains[b] || 1).toFixed(2) + ")";
+        });
+        status.textContent =
+          "Balanced to target " + (r.target ? r.target.toFixed(3) : "0") +
+          " — " + parts.join(" · ");
+        btn.disabled = !canCompose(episode);
+      }, 320);
+    });
+  });
+
   $("export").addEventListener("click", async function () {
     if (!canCompose(episode)) return;
     const btn = $("export");
@@ -262,6 +296,8 @@
     playBtn.textContent = preview.isPlaying() ? "⏸ Pause" : "▶ Play preview";
     $("restart").disabled = !ready;
     $("mute").disabled = !ready;
+    const balanceBtn = $("balance-audio");
+    if (balanceBtn) balanceBtn.disabled = !ready;
     const exportBtn = $("export");
     if (exportBtn && exportBtn.textContent.indexOf("Exporting") === -1) exportBtn.disabled = !ready;
     if (!editor.isOpen()) $("customize").disabled = !ready;

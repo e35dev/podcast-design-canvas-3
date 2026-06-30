@@ -6,6 +6,7 @@
     { "name": "rendered-preview", "run": "node scripts/verify-rendered-preview.mjs" },
     { "name": "rendered-social", "run": "node scripts/verify-social-context.mjs" },
     { "name": "rendered-export", "run": "node scripts/verify-export.mjs" },
-    { "name": "rendered-custom-layout", "run": "node scripts/verify-custom-layout.mjs" }
+    { "name": "rendered-custom-layout", "run": "node scripts/verify-custom-layout.mjs" },
+    { "name": "audio-balance", "run": "node scripts/verify-audio-balance.mjs" }
   ]
 }
