@@ -115,7 +115,8 @@
       ctx.fillRect(0, 0, w, h);
 
       buckets.forEach(function (bucket, i) {
-        const rect = rects[i] || rects[rects.length - 1];
+        const rect = rects[i];
+        if (!rect) return;
         const x = (rect.x / 100) * w;
         const y = (rect.y / 100) * h;
         const rw = (rect.w / 100) * w;
