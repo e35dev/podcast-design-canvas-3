@@ -133,7 +133,7 @@ function connectWebSocket(url) {
   return { ws, ready, send };
 }
 
-const browserExpression = `
+  const browserExpression = `
 (async () => {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const assert = (condition, message) => {
@@ -173,11 +173,20 @@ const browserExpression = `
     return new File(chunks, name, { type: "video/webm" });
   }
 
-  assert(window.PDC, "PDC namespace should load");
-  assert(document.querySelector("#files"), "multi-speaker upload input should exist");
-  assert(document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
-  assert(document.querySelector('[data-file-bucket="guest1"]'), "Guest 1 upload control should exist");
-  assert(document.querySelector("#play").disabled, "play should start disabled before uploads");
+  const waitFor = async (fn, label) => {
+    for (let i = 0; i < 120; i++) {
+      if (fn()) return;
+      await sleep(50);
+    }
+    throw new Error(label);
+  };
+
+  await waitFor(() => window.PDC, "PDC namespace should load");
+  await waitFor(() => window.PDC.episode && typeof window.PDC.episode.setSocialLink === "function", "PDC episode API should load");
+  await waitFor(() => document.querySelector("#files"), "multi-speaker upload input should exist");
+  await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
+  await waitFor(() => document.querySelector('[data-file-bucket="guest1"]'), "Guest 1 upload control should exist");
+  await waitFor(() => document.querySelector("#play") && document.querySelector("#play").disabled, "play should start disabled before uploads");
 
   const hostName = "<img src=x onerror=document.body.dataset.injected=1>.webm";
   const host = await makeVideo(hostName, "#b91c1c");
@@ -236,8 +245,39 @@ const browserExpression = `
   assert(beforeSwitch.every((item) => !item.paused), "videos should be playing after Play click");
   assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "videos should start in sync");
 
+  const layoutSignature = () =>
+    [...document.querySelectorAll("#stage .speaker-frame")].map((frame) => {
+      const style = frame.style;
+      return {
+        speaker: frame.dataset.speaker,
+        left: Number.parseFloat(style.left || "0"),
+        top: Number.parseFloat(style.top || "0"),
+        width: Number.parseFloat(style.width || "0"),
+        height: Number.parseFloat(style.height || "0"),
+      };
+    });
+
+  const initialLayout = layoutSignature();
+
+  document.querySelector('[data-preset="stack"]').click();
+  await sleep(300);
+  const afterStackLayout = layoutSignature();
+  assert(afterStackLayout.length === 2, "stack preset should render two speaker frames");
+  assert(JSON.stringify(initialLayout) !== JSON.stringify(afterStackLayout), "stack should change frame geometry from split");
+
   document.querySelector('[data-preset="spotlight"]').click();
   await sleep(300);
+  const afterSpotlightLayout = layoutSignature();
+  assert(afterSpotlightLayout.length === 2, "spotlight preset should render two speaker frames");
+  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
+  assert(JSON.stringify(afterStackLayout) !== JSON.stringify(afterSpotlightLayout), "spotlight should change frame geometry from stack");
+
+  document.querySelector('[data-preset="split"]').click();
+  await sleep(300);
+  const afterRevertLayout = layoutSignature();
+  assert(document.querySelector("#stage").dataset.preset === "split", "returning to split should restore split");
+  assert(JSON.stringify(afterSpotlightLayout) !== JSON.stringify(afterRevertLayout), "split and spotlight layouts should differ");
+
   const afterSwitch = [...document.querySelectorAll("#stage video")].map((video) => ({
     speaker: video.dataset.speaker,
     width: video.videoWidth,
@@ -245,7 +285,6 @@ const browserExpression = `
     srcIsBlob: video.src.startsWith("blob:"),
   }));
 
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
   assert(afterSwitch.length === 2, "preset switch should preserve both uploaded videos");
   assert(afterSwitch.every((item) => item.srcIsBlob && item.width > 0 && item.height > 0), "preset switch should keep decoded upload media");
 
@@ -253,6 +292,12 @@ const browserExpression = `
     readiness: document.querySelector("#readiness").textContent,
     filledBuckets: [...document.querySelectorAll(".bucket.filled")].map((bucket) => bucket.dataset.bucket),
     beforeSwitch,
+    layoutPass: {
+      initial: initialLayout,
+      stack: afterStackLayout,
+      spotlight: afterSpotlightLayout,
+      split: afterRevertLayout,
+    },
     afterSwitch,
   };
 })()
