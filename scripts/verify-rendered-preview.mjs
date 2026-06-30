@@ -44,6 +44,52 @@ function getFreePort() {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function waitForExit(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      child.off("exit", finish);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      child.off("exit", finish);
+      resolve(false);
+    }, timeoutMs);
+
+    child.once("exit", finish);
+  });
+}
+
+async function stopChrome(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  if (await waitForExit(child, 2000)) return;
+  child.kill("SIGKILL");
+  await waitForExit(child, 2000);
+}
+
+async function removeDirEventually(dir) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt === 7) {
+        console.warn(`verify-rendered-preview: could not remove temp profile ${dir}: ${error.message}`);
+        return;
+      }
+      await sleep(100 * (attempt + 1));
+    }
+  }
+}
+
 async function fetchJson(url, attempts = 60) {
   let lastError;
   for (let i = 0; i < attempts; i++) {
@@ -246,8 +292,8 @@ async function main() {
     console.log("verify-rendered-preview: OK");
     console.log(JSON.stringify(result.result.value, null, 2));
   } finally {
-    child.kill("SIGTERM");
-    fs.rmSync(profileDir, { recursive: true, force: true });
+    await stopChrome(child);
+    await removeDirEventually(profileDir);
   }
 }
 
