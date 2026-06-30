@@ -106,8 +106,9 @@
     function drawFrame() {
       if (!episodeRef) return;
       const buckets = PDC.episode.assignedBuckets(episodeRef);
-      const preset = getPreset(episodeRef.presetId) || PDC.presets.PRESETS[0];
-      const rects = preset.layout(buckets.length);
+      const rects = PDC.templates
+        ? PDC.templates.resolveLayout(episodeRef, buckets.length)
+        : (getPreset(episodeRef.presetId) || PDC.presets.PRESETS[0]).layout(buckets.length);
       const w = canvasEl.width;
       const h = canvasEl.height;
 
@@ -160,7 +161,7 @@
         }
       });
 
-      canvasEl.dataset.preset = preset.id;
+      canvasEl.dataset.preset = episodeRef.presetId;
       canvasEl.dataset.speakers = String(buckets.length);
     }
 

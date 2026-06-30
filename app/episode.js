@@ -77,8 +77,15 @@
     return SPEAKER_BUCKETS.filter((b) => episode.media[b]);
   }
 
+  // A selectable layout is either a built-in preset or a saved/draft custom
+  // template (templates.js loads after this module but is present at call time).
+  function layoutExists(id) {
+    if (getPreset(id)) return true;
+    return !!(PDC.templates && PDC.templates.getTemplate && PDC.templates.getTemplate(id));
+  }
+
   function setPreset(episode, presetId) {
-    if (getPreset(presetId)) episode.presetId = presetId;
+    if (layoutExists(presetId)) episode.presetId = presetId;
     return episode;
   }
 
@@ -88,7 +95,7 @@
   const MIN_SPEAKERS = 2;
 
   function canCompose(episode) {
-    return assignedBuckets(episode).length >= MIN_SPEAKERS && !!getPreset(episode.presetId);
+    return assignedBuckets(episode).length >= MIN_SPEAKERS && layoutExists(episode.presetId);
   }
 
   function readinessReason(episode) {
@@ -97,7 +104,7 @@
       const need = MIN_SPEAKERS - n;
       return `Add ${need} more speaker video${need === 1 ? "" : "s"} to start the preview.`;
     }
-    if (!getPreset(episode.presetId)) return "Choose a preset layout.";
+    if (!layoutExists(episode.presetId)) return "Choose a preset layout.";
     return "";
   }
 

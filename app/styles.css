@@ -216,3 +216,31 @@ body {
 .transport button:disabled { opacity: 0.45; cursor: not-allowed; }
 .transport .primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: none; color: #fff; }
 .scope-note { margin-top: 14px; color: var(--muted); font-size: 12px; }
+
+/* Saved custom layouts (selectable like presets) */
+.templates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+.templates:empty { display: none; }
+@media (max-width: 520px) { .templates { grid-template-columns: 1fr; } }
+.preset.template strong::before { content: "✎ "; }
+
+/* Custom-layout editor overlay (drag/resize frames over the composed canvas) */
+.edit-overlay { position: absolute; inset: 0; z-index: 5; }
+.edit-overlay[hidden] { display: none; }
+.edit-frame {
+  position: absolute; box-sizing: border-box;
+  border: 2px solid #7cc4ff; background: rgba(124, 196, 255, 0.14);
+  border-radius: 6px; cursor: move; touch-action: none; user-select: none;
+}
+.edit-frame-label {
+  position: absolute; top: 4px; left: 6px; padding: 1px 6px;
+  font-size: 12px; font-weight: 600; color: #fff;
+  background: rgba(8, 10, 16, 0.78); border-radius: 4px; pointer-events: none;
+}
+.edit-frame-resize {
+  position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px;
+  background: #7cc4ff; border: 2px solid #04121f; border-radius: 3px; cursor: se-resize;
+}
+.customize { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.customize-edit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.customize-edit[hidden] { display: none; }
+.customize input { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border, #2a3550); background: #0c1120; color: #fff; }
