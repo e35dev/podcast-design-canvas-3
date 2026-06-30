@@ -50,9 +50,29 @@
       delete videos[bucket];
     }
 
+    function currentPlayhead() {
+      const times = Object.values(videos)
+        .map((video) => video.currentTime)
+        .filter((time) => Number.isFinite(time));
+      if (!times.length) return null;
+      return Math.max(...times);
+    }
+
+    function seekAll(time) {
+      if (!Number.isFinite(time) || time < 0) return;
+      Object.values(videos).forEach((v) => {
+        try {
+          v.currentTime = time;
+        } catch (error) {
+          /* not seekable at the moment; ignore until metadata is loaded */
+        }
+      });
+    }
+
     // Lay the assigned speaker videos onto the stage using the preset geometry.
     // Rebuilding the stage children is cheap and keeps DOM order == speaker order.
     function render(episode) {
+      const restoreTime = currentPlayhead();
       const buckets = PDC.episode.assignedBuckets(episode);
       const preset = getPreset(episode.presetId) || PDC.presets.PRESETS[0];
       const rects = preset.layout(buckets.length);
@@ -85,6 +105,8 @@
 
         stageEl.appendChild(frame);
       });
+
+      seekAll(restoreTime);
 
       // Keep playing across re-layout so a preset switch doesn't freeze the preview.
       if (playing) play();
