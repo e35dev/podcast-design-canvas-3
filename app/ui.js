@@ -162,7 +162,9 @@
 
   $("open-layout-editor").addEventListener("click", function () {
     if (!canCompose(episode)) return;
-    layoutEditor.open(episode);
+    layoutEditor.open(episode, function (draftRects) {
+      preview.setDraftLayout(draftRects);
+    });
     $("layout-save").hidden = false;
     $("layout-status").textContent = "Drag speaker frames to reposition them, then save as a template.";
     refresh();
@@ -170,6 +172,8 @@
 
   $("close-layout-editor").addEventListener("click", function () {
     layoutEditor.close();
+    preview.clearDraftLayout();
+    preview.render(episode);
     $("layout-save").hidden = true;
     refresh();
   });
@@ -184,6 +188,7 @@
       const template = PDC.templates.createTemplate(name, layoutEditor.getDraftRects());
       applyTemplate(episode, template.id);
       layoutEditor.close();
+      preview.clearDraftLayout();
       $("layout-save").hidden = true;
       $("template-name").value = "";
       syncPresetSelection();

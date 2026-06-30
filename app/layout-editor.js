@@ -13,6 +13,7 @@
     let open = false;
     let onChange = null;
     let drag = null;
+    let pointerActive = false;
 
     function buckets() {
       return episodeRef ? PDC.episode.assignedBuckets(episodeRef) : [];
@@ -43,11 +44,15 @@
         el.style.width = rect.w + "%";
         el.style.height = rect.h + "%";
         el.innerHTML =
-          '<span class="layout-frame-label">' + labelFor(bucket) + "</span>" +
-          '<span class="layout-handle" data-drag-handle="' + bucket + '" aria-hidden="true"></span>' +
-          '<span class="layout-resize" data-resize-handle="' + bucket + '" aria-hidden="true"></span>';
+          '<button type="button" class="layout-frame-bar" data-drag-handle="' + bucket + '" aria-label="Drag to move ' + labelFor(bucket) + ' frame">' +
+          labelFor(bucket) + " · drag to move</button>" +
+          '<button type="button" class="layout-resize" data-resize-handle="' + bucket + '" aria-label="Resize ' + labelFor(bucket) + ' frame">Resize</button>';
         framesHost.appendChild(el);
       });
+    }
+
+    function emitChange() {
+      if (typeof onChange === "function") onChange(getDraftRects());
     }
 
     function setFrameRect(bucket, rect) {
@@ -60,7 +65,7 @@
         el.style.width = draft[bucket].w + "%";
         el.style.height = draft[bucket].h + "%";
       }
-      if (typeof onChange === "function") onChange(getDraftRects());
+      emitChange();
     }
 
     function pointerToPercent(clientX, clientY) {
@@ -71,24 +76,44 @@
       };
     }
 
-    function onPointerDown(event) {
+    function bindDragListeners() {
+      document.addEventListener("mousemove", onDragMove);
+      document.addEventListener("mouseup", onDragEnd);
+      document.addEventListener("pointermove", onDragMove);
+      document.addEventListener("pointerup", onPointerCancel);
+    }
+
+    function unbindDragListeners() {
+      document.removeEventListener("mousemove", onDragMove);
+      document.removeEventListener("mouseup", onDragEnd);
+      document.removeEventListener("pointermove", onDragMove);
+      document.removeEventListener("pointerup", onPointerCancel);
+    }
+
+    function onDragStart(event) {
+      if (event.type === "mousedown" && event.button !== 0) return;
+      if (event.type === "mousedown" && pointerActive) return;
+
       const moveHandle = event.target.closest("[data-drag-handle]");
       const resizeHandle = event.target.closest("[data-resize-handle]");
       const bucket = (moveHandle && moveHandle.getAttribute("data-drag-handle")) ||
         (resizeHandle && resizeHandle.getAttribute("data-resize-handle"));
       if (!bucket || !draft[bucket]) return;
+
+      if (event.type === "pointerdown") pointerActive = true;
       event.preventDefault();
+      event.stopPropagation();
       drag = {
         bucket: bucket,
         mode: resizeHandle ? "resize" : "move",
         start: pointerToPercent(event.clientX, event.clientY),
         origin: Object.assign({}, draft[bucket]),
       };
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
+      stageWrap.dataset.editingDrag = drag.mode;
+      bindDragListeners();
     }
 
-    function onPointerMove(event) {
+    function onDragMove(event) {
       if (!drag) return;
       const pt = pointerToPercent(event.clientX, event.clientY);
       const dx = pt.x - drag.start.x;
@@ -101,13 +126,21 @@
       }
     }
 
-    function onPointerUp() {
+    function onDragEnd() {
+      if (!drag) return;
       drag = null;
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
+      pointerActive = false;
+      delete stageWrap.dataset.editingDrag;
+      unbindDragListeners();
     }
 
-    framesHost.addEventListener("pointerdown", onPointerDown);
+    function onPointerUp() {
+      pointerActive = false;
+      onDragEnd();
+    }
+
+    framesHost.addEventListener("mousedown", onDragStart);
+    framesHost.addEventListener("pointerdown", onDragStart);
 
     function getDraftRects() {
       const copy = {};
@@ -122,7 +155,7 @@
         if (rectsByBucket[bucket]) draft[bucket] = PDC.templates.clampRect(rectsByBucket[bucket]);
       });
       renderFrames();
-      if (typeof onChange === "function") onChange(getDraftRects());
+      emitChange();
     }
 
     function openEditor(episode, changeCb) {
@@ -130,18 +163,22 @@
       onChange = changeCb || null;
       syncDraftFromEpisode();
       renderFrames();
+      emitChange();
       overlay.hidden = false;
       overlay.setAttribute("aria-hidden", "false");
       stageWrap.classList.add("editing-layout");
+      stageWrap.dataset.editing = "true";
       open = true;
     }
 
     function closeEditor() {
+      onDragEnd();
       overlay.hidden = true;
       overlay.setAttribute("aria-hidden", "true");
       stageWrap.classList.remove("editing-layout");
+      delete stageWrap.dataset.editing;
+      delete stageWrap.dataset.editingDrag;
       open = false;
-      drag = null;
     }
 
     function isOpen() {

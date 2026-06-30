@@ -17,6 +17,7 @@
     let rafId = 0;
     let episodeRef = null;
     let referenceTime = 0;
+    let draftRectsByBucket = null;
 
     function syncReferenceTime() {
       const times = Object.values(videos)
@@ -105,7 +106,9 @@
     function drawFrame() {
       if (!episodeRef) return;
       const buckets = PDC.episode.assignedBuckets(episodeRef);
-      const rects = PDC.layout.resolveRects(episodeRef);
+      const rects = draftRectsByBucket
+        ? PDC.layout.rectsFromBuckets(episodeRef, draftRectsByBucket)
+        : PDC.layout.resolveRects(episodeRef);
       const w = canvasEl.width;
       const h = canvasEl.height;
 
@@ -237,6 +240,16 @@
       });
     }
 
+    function setDraftLayout(rectsByBucket) {
+      draftRectsByBucket = rectsByBucket || null;
+      drawFrame();
+    }
+
+    function clearDraftLayout() {
+      draftRectsByBucket = null;
+      drawFrame();
+    }
+
     return {
       setSource,
       clear,
@@ -245,6 +258,8 @@
       pause,
       restart,
       setMuted,
+      setDraftLayout,
+      clearDraftLayout,
       isPlaying: function () {
         return playing;
       },

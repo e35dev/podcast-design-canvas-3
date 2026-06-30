@@ -86,6 +86,29 @@ const browserExpression = `
     return "mixed";
   }
 
+  function mouseDrag(el, dxPx, dyPx) {
+    const box = el.getBoundingClientRect();
+    const sx = box.left + box.width / 2;
+    const sy = box.top + box.height / 2;
+    const ex = sx + dxPx;
+    const ey = sy + dyPx;
+    el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX: sx, clientY: sy, button: 0, buttons: 1, view: window }));
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, cancelable: true, clientX: ex, clientY: ey, buttons: 1, view: window }));
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX: ex, clientY: ey, view: window }));
+  }
+
+  async function dragGuestToCorner() {
+    const stage = document.getElementById("stage-wrap");
+    const handle = document.querySelector('[data-drag-handle="guest1"]');
+    const resize = document.querySelector('[data-resize-handle="guest1"]');
+    assert(handle && resize, "guest1 drag and resize handles should be visible in the editor");
+    const stageBox = stage.getBoundingClientRect();
+    await mouseDrag(resize, -stageBox.width * 0.12, -stageBox.height * 0.62);
+    await sleep(120);
+    await mouseDrag(handle, stageBox.width * 0.08, stageBox.height * 0.58);
+    await sleep(200);
+  }
+
   await sleep(300);
   assert(window.PDC && window.PDC.ui && window.PDC.ui.layoutEditor, "layout editor should be wired");
   assert(document.querySelector("#open-layout-editor"), "customize layout control should exist");
@@ -104,7 +127,10 @@ const browserExpression = `
   document.querySelector("#open-layout-editor").click();
   await sleep(200);
   assert(!document.getElementById("layout-editor").hidden, "layout editor should open");
-  window.PDC.ui.layoutEditor.setFrameRect("guest1", { x: 58, y: 58, w: 38, h: 38 });
+  assert(document.getElementById("stage-wrap").dataset.editing === "true", "stage should enter editing mode");
+  await dragGuestToCorner();
+  const draft = window.PDC.ui.layoutEditor.getDraftRects().guest1;
+  assert(draft && draft.x > 52 && draft.y > 52 && draft.w < 45, "drag/resize should move guest1 away from default split position");
   document.getElementById("template-name").value = "Corner Guest";
   document.getElementById("save-template").click();
   await sleep(500);

@@ -228,7 +228,7 @@ body {
   padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
   background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer;
 }
-.stage-wrap.editing-layout .stage-canvas { opacity: 0.35; }
+.stage-wrap.editing-layout .stage-canvas { opacity: 1; }
 .layout-editor {
   position: absolute; inset: 0; border-radius: 12px; pointer-events: none;
 }
@@ -236,21 +236,21 @@ body {
 .layout-editor-grid { position: absolute; inset: 0; }
 .layout-frame {
   position: absolute; box-sizing: border-box;
-  border: 2px solid rgba(108, 140, 255, 0.95);
-  background: rgba(108, 140, 255, 0.12);
-  border-radius: 8px; cursor: grab; touch-action: none;
+  border: 2px dashed rgba(108, 140, 255, 0.95);
+  background: rgba(108, 140, 255, 0.08);
+  border-radius: 8px; touch-action: none;
 }
-.layout-frame-label {
-  position: absolute; left: 8px; bottom: 8px; padding: 2px 8px;
-  border-radius: 6px; background: rgba(8, 10, 16, 0.78); color: #fff;
-  font-size: 12px; font-weight: 600; pointer-events: none;
+.layout-frame-bar {
+  position: absolute; left: 6px; top: 6px; right: 36px;
+  padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(108, 140, 255, 0.6);
+  background: rgba(8, 10, 16, 0.82); color: #fff;
+  font-size: 12px; font-weight: 600; cursor: grab; text-align: left;
 }
-.layout-handle {
-  position: absolute; inset: 0; cursor: grab;
-}
+.layout-frame-bar:active { cursor: grabbing; }
 .layout-resize {
-  position: absolute; right: 4px; bottom: 4px; width: 14px; height: 14px;
-  border-radius: 3px; background: #fff; border: 2px solid var(--accent);
+  position: absolute; right: 6px; bottom: 6px; min-width: 52px; height: 28px;
+  padding: 0 8px; border-radius: 8px; border: 2px solid var(--accent);
+  background: #fff; color: var(--ink); font-size: 11px; font-weight: 700;
   cursor: nwse-resize;
 }
 
