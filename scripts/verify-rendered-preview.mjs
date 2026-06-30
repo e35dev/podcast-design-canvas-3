@@ -174,19 +174,25 @@ const browserExpression = `
   }
 
   assert(window.PDC, "PDC namespace should load");
-  assert(document.querySelector("#files"), "upload input should exist");
+  assert(document.querySelector("#files"), "multi-speaker upload input should exist");
+  assert(document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
+  assert(document.querySelector('[data-file-bucket="guest1"]'), "Guest 1 upload control should exist");
   assert(document.querySelector("#play").disabled, "play should start disabled before uploads");
 
   const hostName = "<img src=x onerror=document.body.dataset.injected=1>.webm";
   const host = await makeVideo(hostName, "#b91c1c");
   const guest = await makeVideo("guest.webm", "#047857");
 
-  const input = document.querySelector("#files");
-  const dataTransfer = new DataTransfer();
-  dataTransfer.items.add(host);
-  dataTransfer.items.add(guest);
-  input.files = dataTransfer.files;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
+  function uploadTo(input, file) {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    input.files = dataTransfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  uploadTo(document.querySelector('[data-file-bucket="host"]'), host);
+  await sleep(100);
+  uploadTo(document.querySelector('[data-file-bucket="guest1"]'), guest);
 
   await sleep(1200);
   const videos = [...document.querySelectorAll("#stage video")];

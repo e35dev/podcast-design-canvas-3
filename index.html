@@ -17,10 +17,10 @@
         <h2 class="step-title"><span class="num">1</span> Upload speaker videos</h2>
         <p class="hint">Add at least two synced speaker video files. The first becomes the Host, the next your Guests.</p>
 
-        <label class="uploader" for="files">
+        <label class="uploader" id="uploader" for="files">
+          <span class="uploader-cta">Choose or drop speaker video files</span>
+          <span class="uploader-sub">MP4, WebM, or MOV · select two or more for automatic Host / Guest assignment</span>
           <input id="files" type="file" accept="video/*" multiple aria-label="Upload speaker videos" />
-          <span class="uploader-cta">Choose video files</span>
-          <span class="uploader-sub">MP4, WebM, or MOV · select two or more</span>
         </label>
 
         <div class="buckets" id="buckets" aria-label="Speaker assignments"></div>

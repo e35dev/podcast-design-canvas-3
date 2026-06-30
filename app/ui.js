@@ -41,25 +41,67 @@
     presetsEl.appendChild(btn);
   });
 
-  // --- Upload: one input, multiple files, auto-assigned in order ----------
-  const fileInput = $("files");
-  fileInput.addEventListener("change", (e) => {
-    const files = Array.from(e.target.files || []).filter((f) => /^video\//.test(f.type) || /\.(mp4|webm|mov|m4v|ogg)$/i.test(f.name));
-    if (!files.length) return;
+  function isVideoFile(file) {
+    return !!file && (/^video\//.test(file.type) || /\.(mp4|webm|mov|m4v|ogg)$/i.test(file.name));
+  }
 
-    // Fill empty buckets in canonical order, then overflow onto the last one.
-    files.forEach((file) => {
-      const target = SPEAKER_BUCKETS.find((b) => !episode.media[b]) || SPEAKER_BUCKETS[SPEAKER_BUCKETS.length - 1];
-      assignMedia(episode, target, { name: file.name, size: file.size, type: file.type });
-      preview.setSource(target, file);
-    });
+  function mediaDescriptor(file) {
+    return { name: file.name, size: file.size, type: file.type };
+  }
 
+  function showCurrentPreview() {
     renderBuckets();
     if (canCompose(episode)) {
       preview.render(episode);
       preview.play(); // visible, playing composed preview with no extra clicks
+    } else {
+      preview.pause();
+      $("stage").innerHTML = "";
     }
     refresh();
+  }
+
+  function assignFileToBucket(bucket, file) {
+    if (!isVideoFile(file)) return false;
+    assignMedia(episode, bucket, mediaDescriptor(file));
+    preview.setSource(bucket, file);
+    return true;
+  }
+
+  function assignFilesInOrder(fileList) {
+    const files = Array.from(fileList || []).filter(isVideoFile);
+    if (!files.length) return false;
+
+    // Fill empty buckets in canonical order, then overflow onto the last one.
+    files.forEach((file) => {
+      const target = SPEAKER_BUCKETS.find((b) => !episode.media[b]) || SPEAKER_BUCKETS[SPEAKER_BUCKETS.length - 1];
+      assignFileToBucket(target, file);
+    });
+    showCurrentPreview();
+    return true;
+  }
+
+  // --- Upload: visible multi-file input + drop target ---------------------
+  const uploader = $("uploader");
+  const fileInput = $("files");
+  fileInput.addEventListener("change", (e) => {
+    assignFilesInOrder(e.target.files);
+  });
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    uploader.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      uploader.classList.add("dragging");
+    });
+  });
+  ["dragleave", "drop"].forEach((eventName) => {
+    uploader.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      uploader.classList.remove("dragging");
+    });
+  });
+  uploader.addEventListener("drop", (e) => {
+    assignFilesInOrder(e.dataTransfer && e.dataTransfer.files);
   });
 
   // --- Bucket assignment panel (visible + reassignable) -------------------
@@ -81,6 +123,23 @@
       status.textContent = m ? m.name : "No file";
 
       row.append(name, status);
+
+      const upload = document.createElement("label");
+      upload.className = "bucket-upload";
+      const uploadText = document.createElement("span");
+      uploadText.textContent = `Upload ${BUCKET_LABELS[bucket]} video`;
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "video/*";
+      input.dataset.fileBucket = bucket;
+      input.setAttribute("aria-label", `Upload ${BUCKET_LABELS[bucket]} video`);
+      input.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (assignFileToBucket(bucket, file)) showCurrentPreview();
+      });
+      upload.append(uploadText, input);
+      row.appendChild(upload);
+
       if (m) {
         const remove = document.createElement("button");
         remove.type = "button";
@@ -89,10 +148,7 @@
         remove.addEventListener("click", () => {
           clearMedia(episode, bucket);
           preview.clear(bucket);
-          renderBuckets();
-          if (canCompose(episode)) preview.render(episode);
-          else $("stage").innerHTML = "";
-          refresh();
+          showCurrentPreview();
         });
         row.appendChild(remove);
       }

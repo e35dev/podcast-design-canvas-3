@@ -1,5 +1,5 @@
 {
-  "comment": "Build-correctness and rendered-workflow gate: zero-dependency unit tests over the DOM-free episode/preset model, a preview-build smoke check, and a headless Chrome rendered workflow that generates two local WebM files, uploads them through the shipped file input, confirms Host/Guest bucket assignment, decodes blob-backed video pixels in the composed preview, and verifies the uploaded media survives a preset switch. No seeded product media, committed fixture output, or verifier-only product paths are used.",
+  "comment": "Build-correctness and rendered-workflow gate: zero-dependency unit tests over the DOM-free episode/preset model, a preview-build smoke check, and a headless Chrome rendered workflow that generates two local WebM files, uploads them through the shipped labelled Host and Guest file controls, confirms bucket assignment, decodes blob-backed video pixels in the composed preview, and verifies the uploaded media survives a preset switch. No seeded product media, committed fixture output, or verifier-only product paths are used.",
   "checks": [
     { "name": "test", "run": "node scripts/run-tests.mjs" },
     { "name": "preview-build", "run": "node scripts/preview-build.mjs" },

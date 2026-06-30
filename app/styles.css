@@ -71,24 +71,40 @@ body {
 
 /* Uploader ---------------------------------------------------------------- */
 .uploader {
-  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  gap: 4px;
+  gap: 8px;
   padding: 22px;
   border: 1.5px dashed var(--line);
   border-radius: var(--radius);
   background: var(--panel-2);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
+  text-align: center;
 }
-.uploader:hover { border-color: var(--accent); }
+.uploader:hover, .uploader.dragging { border-color: var(--accent); background: #23283a; }
 .uploader input[type="file"] {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  opacity: 0; cursor: pointer;
+  width: 100%;
+  color: var(--muted);
+  cursor: pointer;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #10131d;
+  padding: 8px;
+  font-size: 13px;
+}
+.uploader input[type="file"]::file-selector-button,
+.bucket-upload input[type="file"]::file-selector-button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  margin-right: 10px;
+  padding: 7px 10px;
 }
 .uploader-cta { font-weight: 600; }
 .uploader-sub { color: var(--muted); font-size: 12px; }
@@ -98,6 +114,7 @@ body {
 .bucket {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--line);
@@ -106,11 +123,31 @@ body {
 }
 .bucket.filled { border-color: rgba(67, 211, 158, 0.45); }
 .bucket-name { font-weight: 600; min-width: 64px; }
-.bucket-status { color: var(--muted); font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bucket-status { color: var(--muted); font-size: 13px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bucket.filled .bucket-status { color: var(--ok); }
+.bucket-upload {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 0 100%;
+  color: var(--muted);
+  font-size: 12px;
+}
+.bucket-upload span { min-width: 122px; }
+.bucket-upload input[type="file"] {
+  min-width: 0;
+  flex: 1;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10131d;
+  padding: 5px;
+  font-size: 12px;
+}
 .bucket-remove {
   background: transparent; border: 1px solid var(--line); color: var(--muted);
   border-radius: 8px; padding: 4px 8px; font-size: 12px; cursor: pointer;
+  margin-left: auto;
 }
 .bucket-remove:hover { color: var(--ink); border-color: var(--muted); }
 
