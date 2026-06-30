@@ -132,25 +132,36 @@ const browserExpression = `
 
   // Wait for the real product result (download link + playback element).
   await waitFor(() => document.querySelector("#export-download") && document.querySelector("#export-playback"), "export should produce a downloadable result", 600);
-  const link = document.querySelector("#export-download");
-  const href = link.getAttribute("href");
-  assert(href && href.indexOf("blob:") === 0, "download link should point at a real blob, not a fake/href-less download");
+  const exportOnce = async () => {
+    const link = document.querySelector("#export-download");
+    const href = link.getAttribute("href");
+    assert(href && href.indexOf("blob:") === 0, "download link should point at a real blob, not a fake/href-less download");
+    const resp = await fetch(href);
+    const blob = await resp.blob();
+    assert(blob.size > 2048, "exported file should carry real bytes, got " + blob.size);
+    const v = document.createElement("video");
+    v.muted = true;
+    v.src = URL.createObjectURL(blob);
+    await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
+    assert(v.videoWidth > 0 && v.videoHeight > 0, "exported file should be a playable video with real dimensions");
+    return {
+      href,
+      bytes: blob.size,
+      type: blob.type,
+      dimensions: v.videoWidth + "x" + v.videoHeight,
+      downloadName: link.getAttribute("download"),
+    };
+  };
 
-  // The exported artifact must be a genuinely playable video with real bytes.
-  const resp = await fetch(href);
-  const blob = await resp.blob();
-  assert(blob.size > 2048, "exported file should carry real bytes, got " + blob.size);
-  const v = document.createElement("video");
-  v.muted = true; v.src = URL.createObjectURL(blob);
-  await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
-  assert(v.videoWidth > 0 && v.videoHeight > 0, "exported file should be a playable video with real dimensions");
+  const first = await exportOnce();
+  document.querySelector("#export").click();
+  await waitFor(() => document.querySelector("#export-download") && document.querySelector("#export-playback"), "second export should produce a downloadable result", 600);
+  const second = await exportOnce();
 
   return {
     presetExported: document.querySelector("#stage-canvas").dataset.preset,
-    bytes: blob.size,
-    type: blob.type,
-    dimensions: v.videoWidth + "x" + v.videoHeight,
-    downloadName: link.getAttribute("download"),
+    first,
+    second,
   };
 })()
 `;
