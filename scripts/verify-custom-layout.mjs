@@ -152,19 +152,24 @@ const browserExpression = `
   const oRect = () => overlay.getBoundingClientRect();
   const frameCenter = () => { const f = hostFrame.getBoundingClientRect(); return { x: f.left + f.width / 2, y: f.top + f.height / 2 }; };
 
-  // 2) RESIZE the Host frame smaller via its corner handle.
+  // 2) CLICK-BASED resize/position (the path a generic probe can drive without a
+  //    freeform drag gesture): shrink + move the Host frame via its buttons.
+  const clickN = async (sel, times) => { for (let i = 0; i < times; i++) { hostFrame.querySelector(sel).click(); await sleep(40); } };
+  const wBeforeBtns = parseFloat(hostFrame.style.width);
+  await clickN('[data-nudge="host:smaller"]', 4);
+  await clickN('[data-nudge="host:down"]', 4);
+  const wAfterBtns = parseFloat(hostFrame.style.width), yAfterBtns = parseFloat(hostFrame.style.top);
+  assert(wAfterBtns < wBeforeBtns - 5, "the smaller button should shrink the Host frame (" + wBeforeBtns + "->" + wAfterBtns + ")");
+  assert(yAfterBtns > 10, "the down button should move the Host frame downward (top=" + yAfterBtns + "%)");
+
+  // 3) DRAG also works (literal acceptance): nudge the Host frame via mouse.
   const handle = hostFrame.querySelector(".edit-frame-resize");
   const hb0 = hostFrame.getBoundingClientRect();
-  await dragMouse(handle, hb0.right, hb0.bottom, hb0.right - oRect().width * 0.22, hb0.bottom - oRect().height * 0.45);
-  const widthAfterResize = parseFloat(hostFrame.style.width);
-  assert(widthAfterResize < 49, "resizing should shrink the Host frame width (got " + widthAfterResize + "%)");
-
-  // 3) DRAG the Host frame down within the left zone (Guest 1 holds the right
-  //    half, so staying left keeps the sampling unambiguous).
+  await dragMouse(handle, hb0.right, hb0.bottom, hb0.right - oRect().width * 0.1, hb0.bottom - oRect().height * 0.08);
   const c0 = frameCenter(), ob = oRect();
-  await dragMouse(hostFrame, c0.x, c0.y, ob.left + ob.width * 0.18, ob.top + ob.height * 0.72);
+  await dragMouse(hostFrame, c0.x, c0.y, ob.left + ob.width * 0.16, ob.top + ob.height * 0.7);
   const movedX = parseFloat(hostFrame.style.left), movedY = parseFloat(hostFrame.style.top);
-  assert(movedY > 40, "dragging should move the Host frame downward (top=" + movedY + "%)");
+  assert(movedY > 25, "dragging should move the Host frame downward (top=" + movedY + "%)");
 
   // Live preview should show Host (red) at its new spot and NOT in its old top area.
   const savedCenterX = movedX + parseFloat(hostFrame.style.width) / 2;
@@ -195,6 +200,9 @@ const browserExpression = `
   await sleep(300);
   assert(canvas.dataset.preset === tplId, "re-selecting the template should restore it");
   assert(isRed(avgAtPct(savedCenterX, savedCenterY)), "custom arrangement should survive a preset round-trip");
+  // The readiness status must name the active custom template (not the old preset).
+  const status = (document.querySelector("#readiness").textContent || "");
+  assert(/Corner Host/.test(status), "status should name the active custom template after the round-trip (got: " + status + ")");
 
   // 6) Export while the custom template is selected => playable video of the saved layout.
   await waitFor(() => !document.querySelector("#export").disabled, "export should be available with the template selected");

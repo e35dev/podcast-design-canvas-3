@@ -78,8 +78,41 @@
         handle.className = "edit-frame-resize";
         handle.dataset.resizeBucket = bucket;
         frame.appendChild(handle);
+
+        // Click-based controls so the layout can be positioned/resized without a
+        // freeform drag gesture (drag/resize above still work for fine control).
+        const tools = document.createElement("div");
+        tools.className = "edit-frame-tools";
+        const STEP = 8;
+        const buttons = [
+          ["left", "◀", -STEP, 0, 0, 0],
+          ["right", "▶", STEP, 0, 0, 0],
+          ["up", "▲", 0, -STEP, 0, 0],
+          ["down", "▼", 0, STEP, 0, 0],
+          ["smaller", "－", 0, 0, -STEP, -STEP],
+          ["larger", "＋", 0, 0, STEP, STEP],
+        ];
+        buttons.forEach(function (b) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "edit-nudge";
+          btn.dataset.nudge = bucket + ":" + b[0];
+          btn.textContent = b[1];
+          btn.setAttribute("aria-label", b[0] + " " + bucket);
+          btn.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+          btn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            const cur = rects[bucket];
+            rects[bucket] = clampRect({ x: cur.x + b[2], y: cur.y + b[3], w: cur.w + b[4], h: cur.h + b[5] });
+            place(frame, rects[bucket]);
+            emit();
+          });
+          tools.appendChild(btn);
+        });
+        frame.appendChild(tools);
+
         frame.addEventListener("mousedown", function (e) {
-          if (e.target === handle) return;
+          if (e.target === handle || (e.target.closest && e.target.closest(".edit-frame-tools"))) return;
           startDrag(bucket, frame, "move", e);
         });
         handle.addEventListener("mousedown", function (e) {

@@ -244,3 +244,15 @@ body {
 .customize-edit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .customize-edit[hidden] { display: none; }
 .customize input { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border, #2a3550); background: #0c1120; color: #fff; }
+
+/* Click-based move/resize controls inside each editor frame */
+.edit-frame-tools {
+  position: absolute; top: 2px; right: 2px; display: grid;
+  grid-template-columns: repeat(3, 1fr); gap: 2px; pointer-events: auto;
+}
+.edit-nudge {
+  width: 20px; height: 18px; padding: 0; font-size: 11px; line-height: 1;
+  border: 1px solid #04121f; border-radius: 3px; background: rgba(8, 16, 28, 0.82);
+  color: #cfe6ff; cursor: pointer;
+}
+.edit-nudge:hover { background: #18324a; }
