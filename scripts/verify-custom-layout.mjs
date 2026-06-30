@@ -3,8 +3,11 @@
 // upload two speaker videos, open the custom layout editor, RESIZE and DRAG the
 // Host frame with real mouse events, confirm the live preview renders the moved
 // Host video, save the arrangement as a named reusable template, confirm the
-// applied template renders the saved positions, survive a preset round-trip, and
-// export a genuinely playable video while the custom template is selected. Media
+// applied template renders the saved positions, survive a preset round-trip,
+// export a genuinely playable video while the custom template is selected, and
+// confirm that opening the editor and clicking Cancel restores the layout that
+// was active before it opened (a preset or a saved template) rather than
+// silently reverting to the first preset. Media
 // is generated in-browser and the artifact is read from the product's own
 // download link — no fixtures, seeded media, or verifier-only paths. Mirrors the
 // CDP harness used by the other rendered checks.
@@ -223,6 +226,28 @@ const browserExpression = `
   await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
   assert(v.videoWidth > 0 && v.videoHeight > 0, "exported custom-layout file should be a playable video");
 
+  // 7) Opening the editor and clicking Cancel must restore the layout that was
+  //    active before it opened — not silently revert to the first preset (Split).
+  document.querySelector('[data-preset="spotlight"]').click();
+  await sleep(150);
+  assert(canvas.dataset.preset === "spotlight", "spotlight should be active before the cancel check");
+  document.querySelector("#customize").click();
+  await sleep(150);
+  assert(!overlay.hidden, "editor should open for the cancel check");
+  document.querySelector("#cancel-customize").click();
+  await sleep(200);
+  assert(canvas.dataset.preset === "spotlight", "Cancel must restore the selected preset, not revert to Split (got " + canvas.dataset.preset + ")");
+
+  // Cancel must also restore a previously saved custom template, not just presets.
+  tplBtn.click();
+  await sleep(200);
+  assert(canvas.dataset.preset === tplId, "saved template should be active before the second cancel check");
+  document.querySelector("#customize").click();
+  await sleep(150);
+  document.querySelector("#cancel-customize").click();
+  await sleep(200);
+  assert(canvas.dataset.preset === tplId, "Cancel must restore the active custom template (got " + canvas.dataset.preset + ")");
+
   return {
     templateId: tplId,
     templateName: tplBtn.textContent,
@@ -230,6 +255,8 @@ const browserExpression = `
     exportedDuringTemplate: canvas.dataset.preset === tplId,
     exportBytes: blob.size,
     exportDimensions: v.videoWidth + "x" + v.videoHeight,
+    cancelRestoredPreset: true,
+    cancelRestoredTemplate: true,
   };
 })()
 `;
