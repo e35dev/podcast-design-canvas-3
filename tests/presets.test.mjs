@@ -53,3 +53,13 @@ test("stack preset gives each speaker a full-width row", () => {
   assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 50 });
   assert.deepEqual(rects[1], { x: 0, y: 50, w: 100, h: 50 });
 });
+
+test("stack preset gives three equal rows that cover the full stage", () => {
+  const rects = getPreset("stack").layout(3);
+  assert.equal(rects.length, 3);
+  assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 33.333 });
+  assert.deepEqual(rects[1], { x: 0, y: 33.333, w: 100, h: 33.334 });
+  assert.deepEqual(rects[2], { x: 0, y: 66.667, w: 100, h: 33.333 });
+  const covered = rects.reduce((sum, r) => sum + r.h, 0);
+  assert.ok(Math.abs(covered - 100) < 0.001, "three stack rows should cover the stage");
+});

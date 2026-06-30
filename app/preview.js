@@ -125,6 +125,13 @@
         ctx.fillStyle = "#000";
         ctx.fillRect(x, y, rw, rh);
 
+        // Clip each speaker to its layout rect so cover-scaled frames cannot bleed
+        // into neighboring rows (Stack) or outside their PiP inset (Spotlight).
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, rw, rh);
+        ctx.clip();
+
         if (v && v.videoWidth > 0) {
           const scale = Math.max(rw / v.videoWidth, rh / v.videoHeight);
           const dw = v.videoWidth * scale;
@@ -132,6 +139,15 @@
           const dx = x + (rw - dw) / 2;
           const dy = y + (rh - dh) / 2;
           ctx.drawImage(v, dx, dy, dw, dh);
+        }
+        ctx.restore();
+
+        // Spotlight guest feeds are small insets — a light frame makes them read
+        // as clearly subordinate picture-in-picture overlays on the host frame.
+        if (rw < w * 0.75 && rh < h * 0.75) {
+          ctx.strokeStyle = "rgba(255,255,255,0.88)";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 1, y + 1, rw - 2, rh - 2);
         }
 
         const label = PDC.episode.speakerName(episodeRef, bucket);
