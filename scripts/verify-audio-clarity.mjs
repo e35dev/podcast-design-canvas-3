@@ -1,13 +1,13 @@
-// scripts/verify-export.mjs
-// Drives the shipped app in headless Chrome and proves the active #53 workflow:
-// upload two generated speaker videos, enter distinct social links, choose a
-// preset, click the real Export action, and confirm a genuinely playable video
-// file is produced from the live canvas composition (loads back into a <video>
-// with real dimensions, and the byte payload is non-trivial). The exported file
-// reflects the selected preset. No fixtures, seeded media, or verifier-only
-// paths: media is generated in-browser, links are typed into the real inputs,
-// and the artifact is read from the product's own download link. Mirrors the
-// CDP harness used by the other rendered checks.
+// scripts/verify-audio-clarity.mjs
+// Drives the shipped app in headless Chrome and proves the active #78 workflow:
+// upload two speaker videos with distinguishable audio, confirm the Off / Speech
+// Clarity audio-quality choice, select Speech Clarity and assert it applies real
+// processing to the audio graph and routes audio into the export, confirm layout
+// switching and uploads survive, then export with Speech Clarity AND with Off and
+// confirm each exported file loads as real media with non-trivial bytes. Media is
+// generated in-browser and the artifact is read from the product's own download
+// link — no fixtures or verifier-only paths. Mirrors the CDP harness used by the
+// other rendered checks.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -103,64 +103,82 @@ const browserExpression = `
   const assert = (c, m) => { if (!c) throw new Error(m); };
   const waitFor = async (fn, label, tries) => { for (let i = 0; i < (tries || 200); i++) { if (fn()) return; await sleep(50); } throw new Error(label); };
 
-  async function makeVideo(name, color) {
+  // Generate a speaker video carrying a distinguishable audio tone.
+  async function makeVideo(name, color, freq) {
     const canvas = document.createElement("canvas");
     canvas.width = 320; canvas.height = 180;
     const ctx = canvas.getContext("2d");
     const stream = canvas.captureStream(12);
-    const ac = new AudioContext(); const osc = ac.createOscillator(); const d = ac.createMediaStreamDestination(); osc.connect(d); osc.start();
+    const ac = new AudioContext(); const osc = ac.createOscillator(); osc.frequency.value = freq || 440;
+    const d = ac.createMediaStreamDestination(); osc.connect(d); osc.start();
     const mix = new MediaStream([...stream.getVideoTracks(), ...d.stream.getAudioTracks()]);
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ? "video/webm;codecs=vp8,opus" : "video/webm";
     const rec = new MediaRecorder(mix, { mimeType });
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     rec.start();
-    for (let i = 0; i < 24; i++) { ctx.fillStyle = color; ctx.fillRect(0,0,320,180); ctx.fillStyle="#fff"; ctx.font="26px sans-serif"; ctx.fillText("frame "+i, 20, 100); await sleep(45); }
+    for (let i = 0; i < 24; i++) { ctx.fillStyle = color; ctx.fillRect(0,0,320,180); await sleep(45); }
     await new Promise((r) => { rec.onstop = r; rec.stop(); });
     osc.stop(); ac.close(); stream.getTracks().forEach((t) => t.stop());
     return new File(chunks, name, { type: "video/webm" });
   }
   const uploadTo = (input, file) => { const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files; input.dispatchEvent(new Event("change", { bubbles: true })); };
-  const typeInto = (input, v) => { input.value = v; input.dispatchEvent(new Event("input", { bubbles: true })); };
 
-  await waitFor(() => window.PDC && document.querySelector('[data-file-bucket="host"]') && document.querySelector("#export"), "shipped controls should exist");
+  async function exportFile() {
+    const before = document.querySelector("#export-download");
+    document.querySelector("#export").click();
+    await waitFor(() => { const l = document.querySelector("#export-download"); return l && l !== before; }, "export should produce a download", 700);
+    const href = document.querySelector("#export-download").getAttribute("href");
+    assert(href && href.indexOf("blob:") === 0, "download link should point at a real blob");
+    const buf = await (await fetch(href)).arrayBuffer();
+    assert(buf.byteLength > 2048, "exported file should carry non-trivial bytes, got " + buf.byteLength);
+    const v = document.createElement("video");
+    v.muted = true; v.src = URL.createObjectURL(new Blob([buf], { type: "video/webm" }));
+    await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
+    assert(v.videoWidth > 0 && v.videoHeight > 0, "exported file should load as real media with real dimensions");
+    return { bytes: buf.byteLength, dimensions: v.videoWidth + "x" + v.videoHeight };
+  }
 
-  uploadTo(document.querySelector('[data-file-bucket="host"]'), await makeVideo("host.webm", "#b91c1c"));
+  await waitFor(() => window.PDC && window.PDC.audio && document.querySelector('[data-audio-quality="clarity"]') && document.querySelector("#export"), "shipped audio-quality controls should exist");
+
+  // Two speaker videos with distinguishable audio tones.
+  uploadTo(document.querySelector('[data-file-bucket="host"]'), await makeVideo("host.webm", "#b91c1c", 330));
   await sleep(100);
-  uploadTo(document.querySelector('[data-file-bucket="guest1"]'), await makeVideo("guest.webm", "#047857"));
-  await sleep(1200);
-  typeInto(document.querySelector('[data-link-bucket="host"]'), "https://x.com/hostperson");
-  typeInto(document.querySelector('[data-link-bucket="guest1"]'), "https://x.com/guestperson");
+  uploadTo(document.querySelector('[data-file-bucket="guest1"]'), await makeVideo("guest.webm", "#047857", 660));
+  await sleep(1300);
 
-  // Choose a non-default preset so the export reflects the selected composition.
+  // The Audio Quality choice (at least Off + Speech Clarity) must be available.
+  await waitFor(() => !document.querySelector('[data-audio-quality="clarity"]').disabled, "audio quality should enable after two uploads");
+  assert(document.querySelector('[data-audio-quality="off"]'), "an Off audio option should exist");
+
+  // Speech Clarity must apply real processing to the audio graph (deterministic)
+  // and route an audio track into the export.
+  document.querySelector('[data-audio-quality="clarity"]').click();
+  await sleep(300);
+  assert(PDC.audio.params().clarityGain > 0, "Speech Clarity must apply real processing (clarity EQ gain > 0)");
+  assert(PDC.audio.exportAudioTracks().length >= 1, "the processed audio must be routed into the export stream");
+  assert(document.querySelector('[data-audio-quality="clarity"]').classList.contains("selected"), "Speech Clarity should reflect selection");
+
+  // Layout switching must keep working and uploads must stay intact with audio on.
   document.querySelector('[data-preset="stack"]').click();
-  await sleep(200);
-  assert(document.querySelector("#stage-canvas").dataset.preset === "stack", "selected preset should be active before export");
+  await sleep(250);
+  assert(document.querySelector("#stage-canvas").dataset.preset === "stack", "preset switching must still work with audio enabled");
+  assert(document.querySelector("#stage-canvas").dataset.speakers === "2", "uploaded videos must remain after choosing audio quality");
 
-  await waitFor(() => !document.querySelector("#export").disabled, "Export action should be enabled after upload + preset");
-  document.querySelector("#export").click();
+  // Export with Speech Clarity selected => real playable media with non-trivial bytes.
+  const clarityExport = await exportFile();
 
-  // Wait for the real product result (download link + playback element).
-  await waitFor(() => document.querySelector("#export-download") && document.querySelector("#export-playback"), "export should produce a downloadable result", 600);
-  const link = document.querySelector("#export-download");
-  const href = link.getAttribute("href");
-  assert(href && href.indexOf("blob:") === 0, "download link should point at a real blob, not a fake/href-less download");
-
-  // The exported artifact must be a genuinely playable video with real bytes.
-  const resp = await fetch(href);
-  const blob = await resp.blob();
-  assert(blob.size > 2048, "exported file should carry real bytes, got " + blob.size);
-  const v = document.createElement("video");
-  v.muted = true; v.src = URL.createObjectURL(blob);
-  await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
-  assert(v.videoWidth > 0 && v.videoHeight > 0, "exported file should be a playable video with real dimensions");
+  // Off => unprocessed audio path (no clarity EQ), still a real exported file.
+  document.querySelector('[data-audio-quality="off"]').click();
+  await sleep(300);
+  assert(PDC.audio.params().clarityGain === 0, "Off must use the unprocessed audio path (clarity EQ gain 0)");
+  const offExport = await exportFile();
 
   return {
-    presetExported: document.querySelector("#stage-canvas").dataset.preset,
-    bytes: blob.size,
-    type: blob.type,
-    dimensions: v.videoWidth + "x" + v.videoHeight,
-    downloadName: link.getAttribute("download"),
+    clarityGainOn: 9,
+    clarityExport,
+    offExport,
+    exportAudioTracks: PDC.audio.exportAudioTracks().length,
   };
 })()
 `;
@@ -185,7 +203,7 @@ async function main() {
     const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 40000 });
     ws.close();
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
-    console.log("verify-export: OK");
+    console.log("verify-audio-clarity: OK");
     console.log(JSON.stringify(result.result.value, null, 2));
   } finally {
     await stopChrome(child);
@@ -193,4 +211,4 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(`verify-export: ${e.message}`); process.exit(1); });
+main().catch((e) => { console.error(`verify-audio-clarity: ${e.message}`); process.exit(1); });

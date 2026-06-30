@@ -10,6 +10,16 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// Node only exposes a global WebSocket with --experimental-websocket before v22.
+// verify.json runs this as plain `node`, so transparently re-exec with the flag
+// if the global is missing — otherwise the CDP connection cannot be made.
+if (typeof WebSocket === "undefined") {
+  const { spawnSync } = await import("node:child_process");
+  const r = spawnSync(process.execPath, ["--experimental-websocket", new URL(import.meta.url).pathname, ...process.argv.slice(2)], { stdio: "inherit" });
+  process.exit(r.status == null ? 1 : r.status);
+}
+
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function findChrome() {
@@ -171,8 +181,6 @@ const browserExpression = `
     return new File(chunks, name, { type: "video/webm" });
   }
 
-  assert(window.PDC, "PDC namespace should load");
-
   const waitFor = async (fn, label) => {
     for (let i = 0; i < 120; i++) {
       if (fn()) return;
@@ -181,6 +189,9 @@ const browserExpression = `
     throw new Error(label);
   };
 
+  // Classic scripts load asynchronously over file://; wait for them rather than
+  // asserting immediately (asserting on the first tick races script execution).
+  await waitFor(() => window.PDC, "PDC namespace should load");
   await waitFor(() => window.PDC && window.PDC.episode, "PDC episode API should load");
   await waitFor(() => document.querySelector("#stage-canvas"), "composed preview canvas should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");

@@ -15,6 +15,16 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+// Node only exposes a global WebSocket with --experimental-websocket before v22.
+// verify.json runs this as plain `node`, so transparently re-exec with the flag
+// if the global is missing — otherwise the CDP connection cannot be made.
+if (typeof WebSocket === "undefined") {
+  const { spawnSync } = await import("node:child_process");
+  const r = spawnSync(process.execPath, ["--experimental-websocket", new URL(import.meta.url).pathname, ...process.argv.slice(2)], { stdio: "inherit" });
+  process.exit(r.status == null ? 1 : r.status);
+}
+
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function findChrome() {

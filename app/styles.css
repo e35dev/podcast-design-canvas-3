@@ -256,3 +256,10 @@ body {
   color: #cfe6ff; cursor: pointer;
 }
 .edit-nudge:hover { background: #18324a; }
+
+/* Single Off / Speech Clarity audio quality choice */
+.audio-quality { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.audio-quality-label { font-weight: 600; }
+.audio-quality button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border, #2a3550); background: #131a2c; color: #cfe6ff; cursor: pointer; }
+.audio-quality button.selected { background: #1d4ed8; border-color: #2563eb; color: #fff; }
+.audio-quality button:disabled { opacity: 0.45; cursor: not-allowed; }

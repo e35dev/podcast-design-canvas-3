@@ -34,27 +34,14 @@
     // opts.maxSeconds is an explicit override only (not a default cap).
     const recordSeconds = Math.max(1, opts.maxSeconds || longest || 3);
 
-    // Best-effort: mix each speaker's audio into one track.
+    // Audio is owned by the shared audio engine (app/audio.js): it taps each
+    // speaker once, applies the selected speech-clarity processing, and exposes
+    // the mixed, processed stream. Recording that stream means the exported file
+    // carries the same audio the creator hears, reflecting the selected setting.
     let audioTracks = [];
-    let audioCtx = null;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC && vids.length) {
-      try {
-        audioCtx = new AC();
-        if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch (e) {} }
-        const dest = audioCtx.createMediaStreamDestination();
-        let connected = 0;
-        for (const v of vids) {
-          try {
-            const src = audioCtx.createMediaElementSource(v);
-            const gain = audioCtx.createGain();
-            gain.gain.value = 1 / Math.max(1, vids.length);
-            src.connect(gain).connect(dest);
-            connected++;
-          } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
-        }
-        if (connected) audioTracks = dest.stream.getAudioTracks();
-      } catch (e) { audioCtx = null; }
+    if (PDC.audio && PDC.audio.isEnabled()) {
+      PDC.audio.retap();
+      audioTracks = PDC.audio.exportAudioTracks();
     }
 
     const canvasStream = canvasEl.captureStream(fps);
@@ -78,7 +65,6 @@
     try { recorder.requestData(); } catch (e) {}
     recorder.stop();
     await stopped;
-    if (audioCtx) { try { await audioCtx.close(); } catch (e) {} }
 
     const blob = new Blob(chunks, { type: mimeType.split(";")[0] });
     const url = URL.createObjectURL(blob);

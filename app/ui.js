@@ -248,6 +248,27 @@
     }
   });
 
+  // Audio quality: a single Off / Speech Clarity choice. Clicking enables the
+  // audio engine (a real user gesture, unmuting the speakers) and applies the
+  // setting, so the choice is audible in preview and recorded into the export.
+  function markAudioQuality(choice) {
+    document.querySelectorAll("[data-audio-quality]").forEach(function (b) {
+      const on = b.dataset.audioQuality === choice;
+      b.classList.toggle("selected", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
+  }
+  document.querySelectorAll("[data-audio-quality]").forEach(function (b) {
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", async function () {
+      if (!canCompose(episode)) return;
+      await PDC.audio.enable();
+      preview.play(); // keep the speakers playing so the processed audio is audible
+      PDC.audio.set("clarity", b.dataset.audioQuality === "clarity" ? "voice" : "off");
+      markAudioQuality(b.dataset.audioQuality);
+    });
+  });
+
   function refresh() {
     const ready = canCompose(episode);
     const n = assignedBuckets(episode).length;
@@ -265,6 +286,7 @@
     const exportBtn = $("export");
     if (exportBtn && exportBtn.textContent.indexOf("Exporting") === -1) exportBtn.disabled = !ready;
     if (!editor.isOpen()) $("customize").disabled = !ready;
+    document.querySelectorAll("[data-audio-quality]").forEach(function (b) { b.disabled = !ready; });
   }
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
