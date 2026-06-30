@@ -18,6 +18,7 @@ const required = {
     "clearMedia",
     "assignedBuckets",
     "setPreset",
+    "setAudioLeveling",
     "setSocialLink",
     "getSocialLink",
     "deriveHandle",

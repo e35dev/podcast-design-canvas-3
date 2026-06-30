@@ -6,6 +6,7 @@
 (function () {
   const PDC = (window.PDC = window.PDC || {});
   const { SPEAKER_BUCKETS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
+  const { LEVELING_OFF } = PDC.audio;
 
   function createEpisode(init) {
     return {
@@ -17,6 +18,8 @@
       // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
       presetId: DEFAULT_PRESET_ID,
+      // Preview audio leveling: "off" plays raw levels; "balanced" normalizes loudness.
+      audioLeveling: LEVELING_OFF,
     };
   }
 
@@ -89,6 +92,14 @@
     return episode;
   }
 
+  function setAudioLeveling(episode, mode) {
+    if (!PDC.audio) return episode;
+    if (mode === PDC.audio.LEVELING_BALANCED || mode === PDC.audio.LEVELING_OFF) {
+      episode.audioLeveling = mode;
+    }
+    return episode;
+  }
+
   // The product needs at least two speakers and a valid preset before it can
   // compose a meaningful preview. This is the single source of truth for the
   // "ready to preview" state — the UI never invents its own gate.
@@ -115,6 +126,7 @@
     clearMedia,
     assignedBuckets,
     setPreset,
+    setAudioLeveling,
     setSocialLink,
     getSocialLink,
     deriveHandle,

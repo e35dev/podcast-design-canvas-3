@@ -108,3 +108,21 @@ test("social links survive a preset switch", () => {
   E.setPreset(ep, "spotlight");
   assert.equal(E.getSocialLink(ep, "host"), "https://x.com/hostperson");
 });
+
+test("audio leveling defaults to off and accepts balanced mode", () => {
+  const ep = E.createEpisode({});
+  assert.equal(ep.audioLeveling, PDC.audio.LEVELING_OFF);
+  E.setAudioLeveling(ep, PDC.audio.LEVELING_BALANCED);
+  assert.equal(ep.audioLeveling, PDC.audio.LEVELING_BALANCED);
+  E.setAudioLeveling(ep, "noise-reduction");
+  assert.equal(ep.audioLeveling, PDC.audio.LEVELING_BALANCED, "unknown modes are rejected");
+  E.setAudioLeveling(ep, PDC.audio.LEVELING_OFF);
+  assert.equal(ep.audioLeveling, PDC.audio.LEVELING_OFF);
+});
+
+test("audio leveling survives a preset switch", () => {
+  const ep = E.createEpisode({});
+  E.setAudioLeveling(ep, PDC.audio.LEVELING_BALANCED);
+  E.setPreset(ep, "stack");
+  assert.equal(ep.audioLeveling, PDC.audio.LEVELING_BALANCED);
+});

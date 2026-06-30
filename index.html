@@ -84,6 +84,15 @@
           <button id="mute" type="button" aria-pressed="false" disabled>🔇 Muted</button>
           <button id="export" type="button" disabled>⬇ Export video</button>
         </div>
+        <h3 class="audio-quality-title">Audio quality</h3>
+        <div class="audio-quality" id="audio-quality" role="group" aria-label="Preview audio quality">
+          <button type="button" class="preset audio-level selected" data-audio-leveling="off" aria-pressed="true" disabled>
+            <strong>Original levels</strong><span>Play uploaded audio as-is in preview</span>
+          </button>
+          <button type="button" class="preset audio-level" data-audio-leveling="balanced" aria-pressed="false" disabled>
+            <strong>Balance speakers</strong><span>Automatically level speaker loudness in preview</span>
+          </button>
+        </div>
         <div class="customize" id="customize-bar">
           <button id="customize" type="button" disabled>✎ Customize layout</button>
           <span class="customize-edit" id="customize-edit" hidden>
@@ -95,11 +104,12 @@
         <p class="hint" id="customize-hint" hidden>Drag a frame to reposition it, or drag its bottom-right corner to resize. Then save it as a reusable template.</p>
         <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
         <div class="export-result" id="export-result" hidden></div>
-        <p class="scope-note">Shapes, captions, b-roll zones, title elements, overlays, and audio cleanup are intentionally out of scope for this step.</p>
+        <p class="scope-note">Preview speaker leveling is available above. Export audio processing, noise reduction, enhancement, and speech clarity remain out of scope for this step.</p>
       </section>
     </main>
 
     <script src="app/presets.js"></script>
+    <script src="app/audio.js"></script>
     <script src="app/episode.js"></script>
     <script src="app/templates.js"></script>
     <script src="app/preview.js"></script>

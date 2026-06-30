@@ -4,7 +4,7 @@
 This product is built one step at a time by an automated maintainer that turns the product vision into a working product through your contributions. Read this before opening a pull request.
 
 ### Currently accepted
-Current accepted work: **#78 Add one real audio clarity choice that affects preview and export**. A PR must complete that issue's Acceptance through the normal product workflow.
+Current accepted work: **#84 Add preview-level audio balancing for uploaded speakers**. A PR must complete that issue's Acceptance through the normal product workflow.
 
 Only implementation PRs that complete the current active step are accepted. Docs-only, planning-only, off-step, speculative, demo-only, mock-only, and unrelated PRs are closed even when the work is technically good.
 

@@ -215,6 +215,10 @@ body {
 }
 .transport button:disabled { opacity: 0.45; cursor: not-allowed; }
 .transport .primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: none; color: #fff; }
+.audio-quality-title { margin: 16px 0 8px; font-size: 14px; font-weight: 600; color: var(--ink); }
+.audio-quality { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (max-width: 520px) { .audio-quality { grid-template-columns: 1fr; } }
+.audio-level:disabled { opacity: 0.45; cursor: not-allowed; }
 .scope-note { margin-top: 14px; color: var(--muted); font-size: 12px; }
 
 /* Saved custom layouts (selectable like presets) */

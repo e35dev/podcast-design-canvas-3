@@ -8,6 +8,7 @@
   const { getPreset } = PDC.presets;
 
   function createPreview(canvasEl) {
+    const audio = PDC.audio.createAudioMixer();
     const ctx = canvasEl.getContext("2d");
     const videos = {};
     const videoHost = document.createElement("div");
@@ -66,6 +67,11 @@
       return v;
     }
 
+    function wireAudio(bucket, videoEl) {
+      if (!videoEl || !videoEl.src) return;
+      audio.analyzeSpeaker(bucket, videoEl);
+    }
+
     function setSource(bucket, file) {
       const v = ensureVideo(bucket);
       if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
@@ -75,8 +81,9 @@
       v.load();
       v.addEventListener(
         "loadeddata",
-        function seekFirstFrame() {
-          v.removeEventListener("loadeddata", seekFirstFrame);
+        function onLoaded() {
+          wireAudio(bucket, v);
+          v.removeEventListener("loadeddata", onLoaded);
           try {
             if (v.currentTime === 0) v.currentTime = Math.max(0, referenceTime);
           } catch (e) {
@@ -88,6 +95,7 @@
             const p = v.play();
             if (p && typeof p.catch === "function") p.catch(function () {});
           }
+          if (episodeRef && episodeRef.audioLeveling) audio.setLeveling(episodeRef.audioLeveling);
         },
         { once: true },
       );
@@ -100,6 +108,7 @@
         if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
         v.remove();
       }
+      audio.disconnectSpeaker(bucket);
       delete videos[bucket];
     }
 
@@ -193,6 +202,7 @@
         canvasEl.dataset.preset = "";
         canvasEl.dataset.speakers = "0";
       }
+      if (episode.audioLeveling) audio.setLeveling(episode.audioLeveling);
       drawFrame();
       return buckets.length;
     }
@@ -232,8 +242,21 @@
 
     function setMuted(muted) {
       Object.keys(videos).forEach(function (b) {
-        videos[b].muted = muted;
+        videos[b].muted = true;
       });
+      audio.setMuted(muted);
+    }
+
+    function setAudioLeveling(mode) {
+      audio.setLeveling(mode);
+    }
+
+    function getSpeakerAudioLevels() {
+      return audio.getSpeakerLevels();
+    }
+
+    function getSpeakerAudioGains() {
+      return audio.getSpeakerGains();
     }
 
     return {
@@ -244,6 +267,9 @@
       pause,
       restart,
       setMuted,
+      setAudioLeveling,
+      getSpeakerAudioLevels,
+      getSpeakerAudioGains,
       isPlaying: function () {
         return playing;
       },

@@ -2,7 +2,8 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason } = PDC.episode;
+  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setAudioLeveling, setSocialLink, speakerName, canCompose, readinessReason } = PDC.episode;
+  const { LEVELING_OFF } = PDC.audio;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -209,6 +210,36 @@
     $("mute").textContent = next ? "🔊 Sound on" : "🔇 Muted";
   });
 
+  const audioQualityEl = $("audio-quality");
+  function markAudioLevelingSelected(mode) {
+    audioQualityEl.querySelectorAll("[data-audio-leveling]").forEach(function (btn) {
+      const on = btn.getAttribute("data-audio-leveling") === mode;
+      btn.classList.toggle("selected", on);
+      btn.setAttribute("aria-pressed", String(on));
+    });
+  }
+  function applyAudioLeveling(mode) {
+    setAudioLeveling(episode, mode);
+    preview.setAudioLeveling(mode);
+    markAudioLevelingSelected(mode);
+    refresh();
+  }
+  audioQualityEl.querySelectorAll("[data-audio-leveling]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      applyAudioLeveling(btn.getAttribute("data-audio-leveling"));
+    });
+  });
+  markAudioLevelingSelected(episode.audioLeveling || LEVELING_OFF);
+
+  PDC.ui = {
+    getSpeakerAudioLevels: function () {
+      return preview.getSpeakerAudioLevels();
+    },
+    getSpeakerAudioGains: function () {
+      return preview.getSpeakerAudioGains();
+    },
+  };
+
   $("export").addEventListener("click", async function () {
     if (!canCompose(episode)) return;
     const btn = $("export");
@@ -262,6 +293,9 @@
     playBtn.textContent = preview.isPlaying() ? "⏸ Pause" : "▶ Play preview";
     $("restart").disabled = !ready;
     $("mute").disabled = !ready;
+    audioQualityEl.querySelectorAll("[data-audio-leveling]").forEach(function (btn) {
+      btn.disabled = !ready;
+    });
     const exportBtn = $("export");
     if (exportBtn && exportBtn.textContent.indexOf("Exporting") === -1) exportBtn.disabled = !ready;
     if (!editor.isOpen()) $("customize").disabled = !ready;
