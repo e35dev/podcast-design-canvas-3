@@ -18,6 +18,10 @@
     let rafId = 0;
     let episodeRef = null;
     let referenceTime = 0;
+    let audioCtx = null;
+    let audioNodes = {};
+    let masterGain = null;
+    let audioDest = null;
 
     function syncReferenceTime() {
       const times = Object.values(videos)
@@ -64,6 +68,51 @@
         videos[bucket] = v;
       }
       return v;
+    }
+
+    function audioProfile() {
+      const quality = episodeRef && episodeRef.audioQuality === "speech-clarity" ? "speech-clarity" : "off";
+      return { quality, gain: quality === "speech-clarity" ? 1.08 : 1 };
+    }
+
+    async function ensureAudioGraph() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC || !episodeRef) return null;
+      if (!audioCtx) audioCtx = new AC();
+      if (audioCtx.state === "suspended") {
+        try { await audioCtx.resume(); } catch (e) {}
+      }
+      const vids = Object.keys(videos).map((bucket) => ({ bucket, video: videos[bucket] })).filter((item) => item.video && item.video.src);
+      if (!vids.length) return null;
+      if (!audioDest) {
+        audioDest = audioCtx.createMediaStreamDestination();
+        masterGain = audioCtx.createGain();
+        masterGain.connect(audioDest);
+        masterGain.connect(audioCtx.destination);
+      }
+      const profile = audioProfile();
+      masterGain.gain.value = profile.gain;
+      Object.keys(audioNodes).forEach(function (bucket) {
+        const node = audioNodes[bucket];
+        if (node && node.gain) node.gain.gain.value = profile.gain;
+      });
+      Object.keys(videos).forEach(function (bucket) {
+        const video = videos[bucket];
+        if (!video || !video.src) return;
+        let node = audioNodes[bucket];
+        if (!node) {
+          node = audioNodes[bucket] = {};
+          try {
+            node.src = audioCtx.createMediaElementSource(video);
+          } catch (e) {
+            return;
+          }
+          node.gain = audioCtx.createGain();
+          node.src.connect(node.gain);
+          node.gain.connect(masterGain);
+        }
+      });
+      return audioDest.stream.getAudioTracks();
     }
 
     function setSource(bucket, file) {
@@ -200,6 +249,7 @@
     function play() {
       playing = true;
       const targetTime = alignPlayback(0);
+      ensureAudioGraph();
       Object.keys(videos).forEach(function (b) {
         const p = videos[b].play();
         if (p && typeof p.catch === "function") p.catch(function () {});
@@ -236,6 +286,10 @@
       });
     }
 
+    async function syncAudio() {
+      return ensureAudioGraph();
+    }
+
     return {
       setSource,
       clear,
@@ -244,6 +298,10 @@
       pause,
       restart,
       setMuted,
+      syncAudio,
+      audioTracks: function () {
+        return audioDest ? audioDest.stream.getAudioTracks() : [];
+      },
       isPlaying: function () {
         return playing;
       },

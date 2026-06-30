@@ -2,7 +2,7 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason } = PDC.episode;
+  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason, setAudioQuality } = PDC.episode;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -10,6 +10,8 @@
 
   const episode = createEpisode({ title: "Episode 1" });
   const preview = PDC.preview.createPreview($("stage-canvas"));
+  PDC.previewController = preview;
+  PDC.currentEpisode = episode;
 
   const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv|avi|mkv)$/i;
 
@@ -156,6 +158,11 @@
     });
   }
 
+  function renderAudioQuality() {
+    const el = $("audio-quality");
+    if (el) el.value = episode.audioQuality || "off";
+  }
+
   function openEditor() {
     if (!canCompose(episode)) return;
     const buckets = assignedBuckets(episode);
@@ -194,6 +201,16 @@
     applyLayout(t.id);
   });
 
+  const audioQuality = $("audio-quality");
+  if (audioQuality) {
+    audioQuality.addEventListener("change", async function () {
+      setAudioQuality(episode, audioQuality.value);
+      await preview.syncAudio();
+      if (preview.isPlaying()) preview.play();
+      refresh();
+    });
+  }
+
   $("play").addEventListener("click", function () {
     if (preview.isPlaying()) preview.pause();
     else preview.play();
@@ -220,6 +237,7 @@
     try {
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
+        audioQuality: episode.audioQuality,
         onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
       const layout = currentLayout();
@@ -269,5 +287,6 @@
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   renderTemplates();
+  renderAudioQuality();
   refresh();
 })();

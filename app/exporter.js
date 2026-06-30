@@ -28,6 +28,7 @@
     opts = opts || {};
     const fps = opts.fps || 30;
     const vids = speakerVideos();
+    const quality = opts.audioQuality === "speech-clarity" ? "speech-clarity" : "off";
     const longest = vids.reduce((m, v) => (isFinite(v.duration) && v.duration > m ? v.duration : m), 0);
     // Export the FULL composition: one complete pass of the longest speaker
     // track, so a long-form episode exports in full rather than being truncated.
@@ -48,7 +49,7 @@
           try {
             const src = audioCtx.createMediaElementSource(v);
             const gain = audioCtx.createGain();
-            gain.gain.value = 1 / Math.max(1, vids.length);
+            gain.gain.value = quality === "speech-clarity" ? 1.08 : 1;
             src.connect(gain).connect(dest);
             connected++;
           } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
