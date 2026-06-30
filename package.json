@@ -1,0 +1,14 @@
+{
+  "name": "podcast-design-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Visual podcast production workspace — composed preview from uploaded speaker videos.",
+  "scripts": {
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "node scripts/lint.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "preview-build": "node scripts/preview-build.mjs",
+    "serve": "node scripts/serve.mjs"
+  }
+}
