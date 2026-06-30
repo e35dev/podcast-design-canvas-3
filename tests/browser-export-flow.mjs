@@ -37,11 +37,13 @@ if (!chromeBin) {
   process.exit(0);
 }
 
-const PAGE = `<!doctype html><meta charset=utf-8><canvas id=stage width=1280 height=720></canvas><script type=module>
-import { createEpisode, assignSpeakerFile, setPreset } from '/app/episode.js';
-import { buildExportPlan } from '/app/export-plan.js';
-import { drawComposite } from '/app/compositor.js';
-import { exportEpisode } from '/app/exporter.js';
+const PAGE = `<!doctype html><meta charset=utf-8><canvas id=stage width=1280 height=720></canvas>
+<script src="/app/presets.js"></script><script src="/app/episode.js"></script><script src="/app/export-plan.js"></script><script src="/app/compositor.js"></script><script src="/app/exporter.js"></script>
+<script>
+const { createEpisode, assignSpeakerFile, setPreset } = window.PDC.episode;
+const { buildExportPlan } = window.PDC.exportPlan;
+const { drawComposite } = window.PDC.compositor;
+const { exportEpisode } = window.PDC.exporter;
 const post=(o)=>fetch('/__result',{method:'POST',body:JSON.stringify(o)});
 async function makeClip(color,label){const c=document.createElement('canvas');c.width=640;c.height=480;const x=c.getContext('2d');
   const vs=c.captureStream(25);const ac=new AudioContext();const osc=ac.createOscillator();const d=ac.createMediaStreamDestination();osc.connect(d);osc.start();

@@ -57,6 +57,14 @@
       </section>
     </main>
 
-    <script type="module" src="app/ui.js"></script>
+    <!-- Classic scripts in dependency order. NOT ES modules: ES module imports
+         are CORS-blocked when the page is opened over file://, so the app loads
+         and runs whether served over http or opened as a local file. -->
+    <script src="app/presets.js"></script>
+    <script src="app/episode.js"></script>
+    <script src="app/export-plan.js"></script>
+    <script src="app/compositor.js"></script>
+    <script src="app/exporter.js"></script>
+    <script src="app/ui.js"></script>
   </body>
 </html>

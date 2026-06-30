@@ -1,63 +1,55 @@
 #!/usr/bin/env node
 // scripts/preview-build.mjs — static shippability check (no bundler, no deps).
-// Verifies the app is self-consistent and servable as a static site:
-//  - index.html exists and references the entry module
-//  - every local ES module import resolves to a real file
-//  - app modules parse as valid ES modules
-// Exits non-zero on any problem so a broken preview never ships.
+// Confirms the app is servable AND openable directly over file://:
+//  - index.html present, has a <canvas>, loads every app script
+//  - app entry is loaded as a CLASSIC script (NOT type="module"), because ES
+//    module imports are CORS-blocked over file:// and would leave a blank page
+//  - every referenced app/*.js exists and parses (node --check)
+//  - the DOM-free models populate the global PDC namespace when loaded
 import { readFileSync, existsSync } from "fs";
+import { spawnSync } from "child_process";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-let problems = [];
+const problems = [];
 
-// 1) index.html present and wired to the app entry.
 const indexPath = path.join(root, "index.html");
 if (!existsSync(indexPath)) {
   problems.push("index.html missing");
 } else {
   const html = readFileSync(indexPath, "utf8");
-  if (!/app\/ui\.js/.test(html)) problems.push("index.html does not load app/ui.js");
   if (!/<canvas/i.test(html)) problems.push("index.html has no <canvas> for the preview");
+  if (/<script[^>]*\btype=["']module["']/i.test(html)) {
+    problems.push("index.html uses <script type=\"module\">, which fails to load over file:// (use classic scripts)");
+  }
+  const scriptSrcs = [...html.matchAll(/<script[^>]*\bsrc=["'](app\/[^"']+)["']/gi)].map((m) => m[1]);
+  const required = ["app/presets.js", "app/episode.js", "app/export-plan.js", "app/compositor.js", "app/exporter.js", "app/ui.js"];
+  for (const r of required) {
+    if (!scriptSrcs.includes(r)) problems.push(`index.html does not load ${r}`);
+  }
+  // ui.js must load after its dependencies.
+  if (scriptSrcs.includes("app/ui.js") && scriptSrcs.indexOf("app/ui.js") !== scriptSrcs.length - 1) {
+    problems.push("app/ui.js (the entry) must be the last script so its dependencies load first");
+  }
+  // Every referenced script must exist and parse.
+  for (const s of scriptSrcs) {
+    const full = path.join(root, s);
+    if (!existsSync(full)) { problems.push(`missing script: ${s}`); continue; }
+    const res = spawnSync(process.execPath, ["--check", full], { encoding: "utf8" });
+    if (res.status !== 0) problems.push(`${s} failed syntax check: ${(res.stderr || "").split("\n")[0]}`);
+  }
 }
 
-// 2) Walk local imports from the app entry; every one must resolve.
-const entry = path.join(root, "app", "ui.js");
-const seen = new Set();
-function walk(file) {
-  if (seen.has(file)) return;
-  seen.add(file);
-  if (!existsSync(file)) {
-    problems.push(`missing module: ${path.relative(root, file)}`);
-    return;
-  }
-  const src = readFileSync(file, "utf8");
-  const re = /\b(?:import|export)\b[^'"`]*?from\s*['"](\.[^'"]+)['"]/g;
-  let m;
-  while ((m = re.exec(src))) {
-    const dep = path.resolve(path.dirname(file), m[1]);
-    walk(dep);
-  }
-}
-if (existsSync(entry)) walk(entry);
-else problems.push("app/ui.js entry missing");
-
-// 3) Each app module must import cleanly in Node (catches syntax errors).
-//    Browser-only modules (touch document/window/MediaRecorder) are guarded so
-//    importing them under Node does not execute DOM code at module top-level.
-const toParse = ["presets.js", "episode.js", "export-plan.js"];
-for (const f of toParse) {
+// DOM-free models must populate the global namespace when loaded.
+for (const f of ["presets.js", "episode.js", "export-plan.js"]) {
   const full = path.join(root, "app", f);
-  if (!existsSync(full)) {
-    problems.push(`missing app/${f}`);
-    continue;
-  }
-  try {
-    await import(pathToFileURL(full).href);
-  } catch (e) {
-    problems.push(`app/${f} failed to import: ${e.message}`);
-  }
+  if (!existsSync(full)) { problems.push(`missing app/${f}`); continue; }
+  try { await import(pathToFileURL(full).href); } catch (e) { problems.push(`app/${f} failed to load: ${e.message}`); }
+}
+const pdc = globalThis.PDC || {};
+for (const ns of ["presets", "episode", "exportPlan"]) {
+  if (!pdc[ns]) problems.push(`PDC.${ns} was not registered by its module`);
 }
 
 if (problems.length) {
@@ -65,4 +57,4 @@ if (problems.length) {
   for (const p of problems) console.error("  - " + p);
   process.exit(1);
 }
-console.log("preview-build OK — static app is self-consistent and servable.");
+console.log("preview-build OK — static app is self-consistent and servable over http and file://.");
