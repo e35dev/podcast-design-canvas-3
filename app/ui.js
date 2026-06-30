@@ -18,11 +18,14 @@
     getTemplate,
     setDraftLayout,
     clearDraftLayout,
+    setAudioSetting,
   } = PDC.episode;
 
   const $ = (id) => document.getElementById(id);
   const episode = createEpisode({ title: "Episode 1" });
   const preview = PDC.preview.createPreview($("stage-canvas"));
+  PDC.previewController = preview;
+  PDC.currentEpisode = episode;
 
   const editor = $("layout-editor");
   const editorShell = $("layout-editor-shell");
@@ -31,6 +34,7 @@
   const templateNameInput = $("template-name");
   const saveTemplateBtn = $("save-template");
   const templateListEl = $("template-list");
+  const audioPanel = $("audio-controls");
   const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv|avi|mkv)$/i;
   const clamp = (v, min, max) => Math.max(min, Math.min(max, Number(v)));
 
@@ -248,11 +252,20 @@
     if ($("export").textContent.indexOf("Exporting") === -1) $("export").disabled = !ready;
     saveTemplateBtn.disabled = !(ready && editorOpen);
     templateActions.hidden = !editorOpen;
+    if (audioPanel) audioPanel.hidden = !ready;
     if (!ready) {
       editor.hidden = true;
       templateActions.hidden = true;
       openEditorBtn.textContent = "Open layout editor";
     }
+  }
+
+  function renderAudioControls() {
+    const audio = episode.audio || {};
+    [["audio-leveling", audio.leveling || "balanced"], ["audio-clarity", audio.clarity || "standard"], ["audio-noise", audio.noise || "light"]].forEach(([id, value]) => {
+      const el = $(id);
+      if (el) el.value = value;
+    });
   }
 
   function afterMediaChange() {
@@ -350,17 +363,40 @@
     $("mute").textContent = next ? "🔊 Sound on" : "🔇 Muted";
   });
 
+  const audioInputs = [
+    ["audio-leveling", "leveling"],
+    ["audio-clarity", "clarity"],
+    ["audio-noise", "noise"],
+  ];
+  audioInputs.forEach(([id, key]) => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("change", async () => {
+      setAudioSetting(episode, key, el.value);
+      await preview.syncAudio();
+      if (preview.isPlaying()) preview.play();
+      refresh();
+    });
+    el.addEventListener("input", async () => {
+      setAudioSetting(episode, key, el.value);
+      await preview.syncAudio();
+      refresh();
+    });
+  });
+
   $("export").addEventListener("click", async () => {
     if (!canCompose(episode)) return;
     const btn = $("export");
     btn.disabled = true;
     btn.textContent = "⏳ Exporting…";
+    await preview.syncAudio();
     preview.play();
     $("export-progress").hidden = false;
     $("export-result").hidden = true;
     try {
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
+        audioSettings: episode.audio,
         onProgress: (p) => { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
       const active = getActiveLayout(episode) || {};
@@ -391,5 +427,6 @@
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   syncDraftFromActive();
   renderTemplateList();
+  renderAudioControls();
   refresh();
 })();

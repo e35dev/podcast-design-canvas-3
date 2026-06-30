@@ -17,6 +17,10 @@
     let rafId = 0;
     let episodeRef = null;
     let referenceTime = 0;
+    let audioCtx = null;
+    let audioNodes = {};
+    let masterGain = null;
+    let audioDest = null;
 
     function syncReferenceTime() {
       const times = Object.values(videos)
@@ -63,6 +67,96 @@
         videos[bucket] = v;
       }
       return v;
+    }
+
+    function audioProfile() {
+      const audio = (episodeRef && episodeRef.audio) || {};
+      const leveling = audio.leveling || "balanced";
+      const clarity = audio.clarity || "standard";
+      const noise = audio.noise || "light";
+      return {
+        leveling,
+        clarity,
+        noise,
+        gain: leveling === "natural" ? 0.88 : leveling === "broadcast" ? 1.15 : 1,
+        lowpass: clarity === "soft" ? 6200 : clarity === "bright" ? 14000 : 9800,
+        highShelf: clarity === "soft" ? -3 : clarity === "bright" ? 4 : 1,
+        noiseGain: noise === "off" ? 1 : noise === "strong" ? 0.82 : 0.92,
+      };
+    }
+
+    function stopAudioGraph() {
+      if (audioCtx) {
+        try {
+          Object.keys(audioNodes).forEach(function (bucket) {
+            const node = audioNodes[bucket];
+            if (node && node.src) {
+              try { node.src.disconnect(); } catch (e) {}
+            }
+            if (node && node.eq) {
+              try { node.eq.disconnect(); } catch (e) {}
+            }
+            if (node && node.hi) {
+              try { node.hi.disconnect(); } catch (e) {}
+            }
+            if (node && node.gain) {
+              try { node.gain.disconnect(); } catch (e) {}
+            }
+          });
+          if (masterGain) masterGain.disconnect();
+        } catch (e) {}
+      }
+      audioNodes = {};
+      masterGain = null;
+      audioDest = null;
+    }
+
+    async function ensureAudioGraph() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC || !episodeRef) return null;
+      if (!audioCtx) {
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === "suspended") {
+        try { await audioCtx.resume(); } catch (e) {}
+      }
+      const vids = Object.keys(videos).map((bucket) => ({ bucket, video: videos[bucket] })).filter((item) => item.video && item.video.src);
+      if (!vids.length) return null;
+      if (!audioDest) {
+        audioDest = audioCtx.createMediaStreamDestination();
+        masterGain = audioCtx.createGain();
+        masterGain.connect(audioDest);
+        masterGain.connect(audioCtx.destination);
+      }
+      const profile = audioProfile();
+      masterGain.gain.value = profile.gain;
+      Object.keys(audioNodes).forEach(function (bucket) {
+        const video = videos[bucket];
+        if (!video) return;
+        let node = audioNodes[bucket];
+        if (!node) {
+          node = audioNodes[bucket] = {};
+          try {
+            node.src = audioCtx.createMediaElementSource(video);
+          } catch (e) {
+            return;
+          }
+          node.gain = audioCtx.createGain();
+          node.eq = audioCtx.createBiquadFilter();
+          node.eq.type = "lowpass";
+          node.hi = audioCtx.createBiquadFilter();
+          node.hi.type = "highshelf";
+          node.src.connect(node.eq);
+          node.eq.connect(node.hi);
+          node.hi.connect(node.gain);
+          node.gain.connect(masterGain);
+        }
+        node.eq.frequency.value = profile.lowpass;
+        node.hi.frequency.value = 3200;
+        node.hi.gain.value = profile.highShelf;
+        node.gain.gain.value = profile.noiseGain;
+      });
+      return audioDest.stream.getAudioTracks();
     }
 
     function setSource(bucket, file) {
@@ -197,9 +291,10 @@
       return buckets.length;
     }
 
-    function play() {
+    async function play() {
       playing = true;
       const targetTime = alignPlayback(0);
+      await ensureAudioGraph();
       Object.keys(videos).forEach(function (b) {
         const p = videos[b].play();
         if (p && typeof p.catch === "function") p.catch(function () {});
@@ -216,6 +311,20 @@
       Object.keys(videos).forEach(function (b) {
         videos[b].pause();
       });
+    }
+
+    async function syncAudio() {
+      const tracks = await ensureAudioGraph();
+      const profile = audioProfile();
+      if (masterGain) masterGain.gain.value = profile.gain;
+      Object.keys(audioNodes).forEach(function (bucket) {
+        const node = audioNodes[bucket];
+        if (!node) return;
+        node.eq.frequency.value = profile.lowpass;
+        node.hi.gain.value = profile.highShelf;
+        node.gain.gain.value = profile.noiseGain;
+      });
+      return tracks;
     }
 
     function restart() {
@@ -244,6 +353,10 @@
       pause,
       restart,
       setMuted,
+      syncAudio,
+      audioTracks: function () {
+        return audioDest ? audioDest.stream.getAudioTracks() : [];
+      },
       isPlaying: function () {
         return playing;
       },

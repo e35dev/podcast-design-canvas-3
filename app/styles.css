@@ -198,6 +198,28 @@ body {
 .template-pill:hover { border-color: var(--muted); }
 .template-pill.active-template { border-color: var(--accent); color: #fff; }
 .template-empty { color: var(--muted); font-size: 12px; }
+.audio-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 640px) { .audio-controls { grid-template-columns: 1fr; } }
+.audio-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.audio-controls select {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
 
 .readiness { margin-top: 14px; color: var(--muted); font-size: 13px; min-height: 18px; }
 

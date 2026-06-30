@@ -83,11 +83,40 @@
           <div id="template-list" class="template-list" aria-label="Saved templates"></div>
         </div>
 
+        <h2 class="step-title"><span class="num">4</span> Audio cleanup</h2>
+        <p class="hint">Choose creator-facing audio quality settings that affect preview playback and export output.</p>
+        <div id="audio-controls" class="audio-controls">
+          <label>
+            <span>Leveling</span>
+            <select id="audio-leveling" aria-label="Audio leveling">
+              <option value="natural">Natural</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="broadcast">Broadcast</option>
+            </select>
+          </label>
+          <label>
+            <span>Speech clarity</span>
+            <select id="audio-clarity" aria-label="Speech clarity">
+              <option value="soft">Soft</option>
+              <option value="standard" selected>Standard</option>
+              <option value="bright">Bright</option>
+            </select>
+          </label>
+          <label>
+            <span>Noise reduction</span>
+            <select id="audio-noise" aria-label="Noise reduction">
+              <option value="off">Off</option>
+              <option value="light" selected>Light</option>
+              <option value="strong">Strong</option>
+            </select>
+          </label>
+        </div>
+
         <p class="readiness" id="readiness" role="status"></p>
       </section>
 
       <section class="panel preview" aria-label="Composed preview">
-        <h2 class="step-title"><span class="num">4</span> Preview</h2>
+        <h2 class="step-title"><span class="num">5</span> Preview</h2>
         <div class="stage-wrap">
           <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
           <div class="stage-empty" id="empty">
@@ -102,7 +131,7 @@
         </div>
         <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
         <div class="export-result" id="export-result" hidden></div>
-        <p class="scope-note">Audio cleanup, captions, and b-roll are intentionally out of scope for this step.</p>
+        <p class="scope-note">Captions and b-roll are intentionally out of scope for this step.</p>
       </section>
     </main>
 

@@ -37,23 +37,42 @@
     // Best-effort: mix each speaker's audio into one track.
     let audioTracks = [];
     let audioCtx = null;
+    const settings = opts.audioSettings || {};
+    const leveling = settings.leveling || "balanced";
+    const clarity = settings.clarity || "standard";
+    const noise = settings.noise || "light";
+    const profile = {
+      gain: leveling === "natural" ? 0.88 : leveling === "broadcast" ? 1.15 : 1,
+      lowpass: clarity === "soft" ? 6200 : clarity === "bright" ? 14000 : 9800,
+      highShelf: clarity === "soft" ? -3 : clarity === "bright" ? 4 : 1,
+      noiseGain: noise === "off" ? 1 : noise === "strong" ? 0.82 : 0.92,
+    };
     const AC = window.AudioContext || window.webkitAudioContext;
     if (AC && vids.length) {
       try {
         audioCtx = new AC();
         if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch (e) {} }
         const dest = audioCtx.createMediaStreamDestination();
-        let connected = 0;
+        const masterGain = audioCtx.createGain();
+        masterGain.gain.value = profile.gain;
+        masterGain.connect(dest);
         for (const v of vids) {
           try {
-            const src = audioCtx.createMediaElementSource(v);
+            const stream = typeof v.captureStream === "function" ? v.captureStream() : null;
+            const src = stream ? audioCtx.createMediaStreamSource(stream) : audioCtx.createMediaElementSource(v);
+            const eq = audioCtx.createBiquadFilter();
+            eq.type = "lowpass";
+            eq.frequency.value = profile.lowpass;
+            const hi = audioCtx.createBiquadFilter();
+            hi.type = "highshelf";
+            hi.frequency.value = 3200;
+            hi.gain.value = profile.highShelf;
             const gain = audioCtx.createGain();
-            gain.gain.value = 1 / Math.max(1, vids.length);
-            src.connect(gain).connect(dest);
-            connected++;
+            gain.gain.value = profile.noiseGain;
+            src.connect(eq).connect(hi).connect(gain).connect(masterGain);
           } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
         }
-        if (connected) audioTracks = dest.stream.getAudioTracks();
+        audioTracks = dest.stream.getAudioTracks();
       } catch (e) { audioCtx = null; }
     }
 
@@ -78,10 +97,9 @@
     try { recorder.requestData(); } catch (e) {}
     recorder.stop();
     await stopped;
-    if (audioCtx) { try { await audioCtx.close(); } catch (e) {} }
-
     const blob = new Blob(chunks, { type: mimeType.split(";")[0] });
     const url = URL.createObjectURL(blob);
+    if (audioCtx) { try { await audioCtx.close(); } catch (e) {} }
     return { blob, url, bytes: blob.size, mimeType, seconds: recordSeconds };
   }
 
