@@ -80,14 +80,18 @@
           <button id="play" type="button" class="primary" disabled>▶ Play preview</button>
           <button id="restart" type="button" disabled>↺ Restart</button>
           <button id="mute" type="button" aria-pressed="false" disabled>🔇 Muted</button>
+          <button id="export" type="button" disabled>⬇ Export video</button>
         </div>
-        <p class="scope-note">Export, audio cleanup, captions, and templates are intentionally out of scope for this step.</p>
+        <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
+        <div class="export-result" id="export-result" hidden></div>
+        <p class="scope-note">Audio cleanup, captions, b-roll, and reusable templates are intentionally out of scope for this step.</p>
       </section>
     </main>
 
     <script src="app/presets.js"></script>
     <script src="app/episode.js"></script>
     <script src="app/preview.js"></script>
+    <script src="app/exporter.js"></script>
     <script src="app/ui.js"></script>
   </body>
 </html>

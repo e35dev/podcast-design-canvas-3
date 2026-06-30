@@ -119,6 +119,45 @@
     $("mute").textContent = next ? "🔊 Sound on" : "🔇 Muted";
   });
 
+  $("export").addEventListener("click", async function () {
+    if (!canCompose(episode)) return;
+    const btn = $("export");
+    btn.disabled = true;
+    btn.textContent = "⏳ Exporting…";
+    preview.play(); // ensure the canvas is composing live frames while we capture
+    $("export-progress").hidden = false;
+    $("export-result").hidden = true;
+    try {
+      const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
+        fps: 30,
+        onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
+      });
+      const preset = PDC.presets.getPreset(episode.presetId);
+      const fname = (episode.title || "episode").replace(/[^\w.-]+/g, "_") + "-" + preset.id + ".webm";
+      PDC.exporter.download(out.url, fname);
+      const result = $("export-result");
+      result.hidden = false;
+      result.innerHTML =
+        "Exported <strong>" + fname + "</strong> — " + Math.round(out.bytes / 1024) + " KB, " +
+        "“" + preset.name + "” layout. " +
+        '<a id="export-download" href="' + out.url + '" download="' + fname + '">Download again</a>';
+      // A real playable preview of the exported file (also lets review confirm playback).
+      const v = document.createElement("video");
+      v.id = "export-playback";
+      v.src = out.url;
+      v.controls = true;
+      v.muted = true;
+      v.style.cssText = "display:block;margin-top:8px;max-width:320px;width:100%";
+      result.appendChild(v);
+    } catch (err) {
+      $("export-result").hidden = false;
+      $("export-result").textContent = "Export failed: " + (err && err.message);
+    } finally {
+      btn.disabled = !canCompose(episode);
+      btn.textContent = "⬇ Export video";
+    }
+  });
+
   function refresh() {
     const ready = canCompose(episode);
     const n = assignedBuckets(episode).length;
@@ -133,6 +172,8 @@
     playBtn.textContent = preview.isPlaying() ? "⏸ Pause" : "▶ Play preview";
     $("restart").disabled = !ready;
     $("mute").disabled = !ready;
+    const exportBtn = $("export");
+    if (exportBtn && exportBtn.textContent.indexOf("Exporting") === -1) exportBtn.disabled = !ready;
   }
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
