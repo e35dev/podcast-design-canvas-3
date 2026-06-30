@@ -15,15 +15,12 @@
     <main class="layout">
       <section class="panel setup" aria-label="Episode setup">
         <h2 class="step-title"><span class="num">1</span> Upload speaker videos</h2>
-        <p class="hint">Add at least two synced speaker video files. The first becomes the Host, the next your Guests.</p>
-
-        <label class="uploader" for="files">
-          <input id="files" type="file" accept="video/*" multiple aria-label="Upload speaker videos" />
-          <span class="uploader-cta">Choose video files</span>
-          <span class="uploader-sub">MP4, WebM, or MOV · select two or more</span>
-        </label>
+        <p class="hint">Assign at least two synced speaker videos — one to Host and one to Guest. Use the per-speaker upload buttons below.</p>
 
         <div class="buckets" id="buckets" aria-label="Speaker assignments"></div>
+
+        <button type="button" class="bulk-upload" id="bulk-upload">Add multiple videos at once</button>
+        <input id="bulk-files" type="file" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" multiple hidden />
 
         <h2 class="step-title"><span class="num">2</span> Choose a preset layout</h2>
         <div class="presets" id="presets" role="group" aria-label="Preset layouts"></div>

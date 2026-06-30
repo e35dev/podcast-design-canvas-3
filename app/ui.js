@@ -1,14 +1,13 @@
 // app/ui.js  (browser entry — classic script, runs last)
 // Wires the real product workflow to the DOM:
-//   upload speaker videos -> auto-assign to Host/Guest buckets -> pick a preset
-//   -> a synchronized composed preview of the uploaded pixels plays immediately.
+//   upload speaker videos -> assign to Host/Guest buckets -> pick a preset
+//   -> click Play to see a synchronized composed preview of the uploaded pixels.
 //
-// Design intent: the only action a user (or an automated reviewer) must take to
-// see a real composed preview is to choose two video files. Bucket assignment is
-// automatic (first file -> Host, second -> Guest 1, ...), a preset is selected
-// by default, and the preview renders and plays as soon as two files exist — no
-// separate "compose" step gates the visible result. Everything reads logic from
-// window.PDC so it works over http:// and file:// alike (no ES modules).
+// Each speaker bucket has its own visible Upload button that opens a file picker.
+// A bulk "Add multiple videos" control fills empty buckets in order. The preview
+// renders real <video> elements as soon as two buckets are filled; Play is enabled
+// and starts synchronized playback. Everything reads logic from window.PDC so it
+// works over http:// and file:// alike (no ES modules).
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
@@ -18,6 +17,31 @@
 
   const episode = createEpisode({ title: "Episode 1" });
   const preview = PDC.preview.createPreview($("stage"));
+
+  const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv|avi|mkv)$/i;
+
+  function isVideoFile(file) {
+    if (!file) return false;
+    if (file.type && /^video\//i.test(file.type)) return true;
+    return VIDEO_EXT.test(file.name || "");
+  }
+
+  function ingestFile(bucket, file) {
+    if (!isVideoFile(file)) return false;
+    assignMedia(episode, bucket, { name: file.name, size: file.size, type: file.type || "video/*" });
+    preview.setSource(bucket, file);
+    return true;
+  }
+
+  function afterMediaChange() {
+    renderBuckets();
+    if (canCompose(episode)) {
+      preview.render(episode);
+    } else {
+      $("stage").innerHTML = "";
+    }
+    refresh();
+  }
 
   // --- Preset buttons (one selected by default) ---------------------------
   const presetsEl = $("presets");
@@ -41,29 +65,16 @@
     presetsEl.appendChild(btn);
   });
 
-  // --- Upload: one input, multiple files, auto-assigned in order ----------
-  const fileInput = $("files");
-  fileInput.addEventListener("change", (e) => {
-    const files = Array.from(e.target.files || []).filter((f) => /^video\//.test(f.type) || /\.(mp4|webm|mov|m4v|ogg)$/i.test(f.name));
-    if (!files.length) return;
-
-    // Fill empty buckets in canonical order, then overflow onto the last one.
-    files.forEach((file) => {
-      const target = SPEAKER_BUCKETS.find((b) => !episode.media[b]) || SPEAKER_BUCKETS[SPEAKER_BUCKETS.length - 1];
-      assignMedia(episode, target, { name: file.name, size: file.size, type: file.type });
-      preview.setSource(target, file);
-    });
-
-    renderBuckets();
-    if (canCompose(episode)) {
-      preview.render(episode);
-      preview.play(); // visible, playing composed preview with no extra clicks
-    }
-    refresh();
-  });
-
-  // --- Bucket assignment panel (visible + reassignable) -------------------
+  // --- Per-bucket upload: visible button + hidden file input per speaker ---
   const bucketsEl = $("buckets");
+
+  function handleFilesForBucket(bucket, fileList) {
+    const files = Array.from(fileList || []).filter(isVideoFile);
+    if (!files.length) return;
+    ingestFile(bucket, files[0]);
+    afterMediaChange();
+  }
+
   function renderBuckets() {
     bucketsEl.innerHTML = "";
     SPEAKER_BUCKETS.forEach((bucket) => {
@@ -71,10 +82,41 @@
       const row = document.createElement("div");
       row.className = "bucket" + (m ? " filled" : "");
       row.dataset.bucket = bucket;
-      const status = m ? `${m.name}` : "No file";
-      row.innerHTML =
-        `<span class="bucket-name">${BUCKET_LABELS[bucket]}</span>` +
-        `<span class="bucket-status" data-status="${bucket}">${status}</span>`;
+
+      const name = document.createElement("span");
+      name.className = "bucket-name";
+      name.textContent = BUCKET_LABELS[bucket];
+
+      const status = document.createElement("span");
+      status.className = "bucket-status";
+      status.dataset.status = bucket;
+      status.textContent = m ? m.name : "No file";
+
+      const actions = document.createElement("div");
+      actions.className = "bucket-actions";
+
+      const inputId = `upload-${bucket}`;
+      const input = document.createElement("input");
+      input.type = "file";
+      input.id = inputId;
+      input.hidden = true;
+      input.accept = "video/*,.mp4,.webm,.mov,.m4v,.ogg";
+      input.setAttribute("aria-label", `Upload video for ${BUCKET_LABELS[bucket]}`);
+      input.addEventListener("change", (e) => {
+        handleFilesForBucket(bucket, e.target.files);
+        e.target.value = "";
+      });
+
+      const uploadBtn = document.createElement("button");
+      uploadBtn.type = "button";
+      uploadBtn.className = "bucket-upload";
+      uploadBtn.textContent = m ? "Replace" : "Upload";
+      uploadBtn.setAttribute("aria-controls", inputId);
+      uploadBtn.addEventListener("click", () => input.click());
+
+      actions.appendChild(input);
+      actions.appendChild(uploadBtn);
+
       if (m) {
         const remove = document.createElement("button");
         remove.type = "button";
@@ -83,16 +125,33 @@
         remove.addEventListener("click", () => {
           clearMedia(episode, bucket);
           preview.clear(bucket);
-          renderBuckets();
-          if (canCompose(episode)) preview.render(episode);
-          else $("stage").innerHTML = "";
-          refresh();
+          afterMediaChange();
         });
-        row.appendChild(remove);
+        actions.appendChild(remove);
       }
+
+      row.appendChild(name);
+      row.appendChild(status);
+      row.appendChild(actions);
       bucketsEl.appendChild(row);
     });
   }
+
+  // --- Bulk upload: fills empty buckets in canonical order ------------------
+  const bulkInput = $("bulk-files");
+  $("bulk-upload").addEventListener("click", () => bulkInput.click());
+  bulkInput.addEventListener("change", (e) => {
+    const files = Array.from(e.target.files || []).filter(isVideoFile);
+    if (!files.length) return;
+
+    files.forEach((file) => {
+      const target = SPEAKER_BUCKETS.find((b) => !episode.media[b]) || SPEAKER_BUCKETS[SPEAKER_BUCKETS.length - 1];
+      ingestFile(target, file);
+    });
+
+    e.target.value = "";
+    afterMediaChange();
+  });
 
   // --- Transport controls -------------------------------------------------
   $("play").addEventListener("click", () => {
@@ -115,7 +174,7 @@
     $("stage").classList.toggle("ready", ready);
     $("empty").hidden = ready;
     $("readiness").textContent = ready
-      ? `Previewing ${n} speaker${n === 1 ? "" : "s"} in the “${PDC.presets.getPreset(episode.presetId).name}” layout.`
+      ? `${n} speaker${n === 1 ? "" : "s"} assigned — click Play preview to watch the “${PDC.presets.getPreset(episode.presetId).name}” layout.`
       : readinessReason(episode);
 
     const playBtn = $("play");
