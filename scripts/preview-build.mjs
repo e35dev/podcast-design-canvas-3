@@ -59,6 +59,16 @@ if (!PDC.episode.canCompose(ep)) {
   console.error("preview-build: canCompose() false with two speakers + default preset — readiness gate is broken");
   process.exit(1);
 }
+PDC.episode.setSocialLink(ep, "host", "https://x.com/hostperson");
+PDC.episode.setSocialLink(ep, "guest1", "@guestperson");
+if (PDC.episode.speakerName(ep, "host") !== "hostperson" || PDC.episode.speakerLabels(ep).guest1 !== "guestperson") {
+  console.error("preview-build: social links should derive speaker names for preview labels");
+  process.exit(1);
+}
+if (!html.includes('data-link-bucket="host"')) {
+  console.error("preview-build: index.html must declare static speaker social-link inputs");
+  process.exit(1);
+}
 
 // 4. Copy the static app into dist/.
 const dist = path.join(root, "dist");

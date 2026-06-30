@@ -69,17 +69,24 @@
     input.addEventListener("input", handle);
   });
 
+  function onSocialLinkChange(bucket, value) {
+    setSocialLink(episode, bucket, value);
+    updateBucketRow(bucket);
+    if (canCompose(episode)) {
+      preview.render(episode);
+      preview.drawFrame();
+      if (!preview.isPlaying()) preview.play();
+    }
+    refresh();
+  }
+
   document.querySelectorAll("input[data-link-bucket]").forEach(function (input) {
     const bucket = input.getAttribute("data-link-bucket");
-    input.addEventListener("input", function () {
-      setSocialLink(episode, bucket, input.value);
-      updateBucketRow(bucket);
-      if (canCompose(episode)) {
-        preview.render(episode);
-        preview.play();
-      }
-      refresh();
-    });
+    function handle() {
+      onSocialLinkChange(bucket, input.value);
+    }
+    input.addEventListener("input", handle);
+    input.addEventListener("change", handle);
   });
 
   const presetsEl = $("presets");

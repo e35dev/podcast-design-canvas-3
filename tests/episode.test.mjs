@@ -88,7 +88,20 @@ test("deriveHandle reads handles from common profile URL shapes", () => {
   assert.equal(E.deriveHandle("https://www.linkedin.com/in/jane-doe"), "jane-doe");
   assert.equal(E.deriveHandle("github.com/foo?tab=repos"), "foo");
   assert.equal(E.deriveHandle("@bar"), "bar");
+  assert.equal(E.deriveHandle("plainhandle"), "plainhandle");
+  assert.equal(E.deriveHandle("https://x.com/hostperson/"), "hostperson");
+  assert.equal(E.deriveHandle("https://www.youtube.com/@guesttwo"), "guesttwo");
   assert.equal(E.deriveHandle(""), "");
+});
+
+test("speakerLabels maps every bucket to its current display name", () => {
+  const ep = E.createEpisode({});
+  E.setSocialLink(ep, "host", "https://x.com/hostperson");
+  E.setSocialLink(ep, "guest2", "@guesttwo");
+  const labels = E.speakerLabels(ep);
+  assert.equal(labels.host, "hostperson");
+  assert.equal(labels.guest1, "Guest 1");
+  assert.equal(labels.guest2, "guesttwo");
 });
 
 test("removing a speaker clears only its own link, not the others'", () => {
