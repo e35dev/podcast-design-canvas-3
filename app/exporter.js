@@ -34,7 +34,13 @@
     // opts.maxSeconds is an explicit override only (not a default cap).
     const recordSeconds = Math.max(1, opts.maxSeconds || longest || 3);
 
-    // Best-effort: mix each speaker's audio into one track.
+    // Mix each speaker's audio into one track. We tap each speaker through
+    // captureStream() + createMediaStreamSource() rather than
+    // createMediaElementSource(): a media element accepts only ONE element source
+    // node for its lifetime and that node permanently reroutes the element's
+    // audio, which silenced every export after the first and muted the live
+    // preview. captureStream() is repeatable and non-destructive, so repeated
+    // exports keep their audio and the preview stays audible.
     let audioTracks = [];
     let audioCtx = null;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -46,12 +52,14 @@
         let connected = 0;
         for (const v of vids) {
           try {
-            const src = audioCtx.createMediaElementSource(v);
+            const capture = v.captureStream ? v.captureStream() : (v.mozCaptureStream ? v.mozCaptureStream() : null);
+            if (!capture || !capture.getAudioTracks().length) continue;
+            const src = audioCtx.createMediaStreamSource(capture);
             const gain = audioCtx.createGain();
             gain.gain.value = 1 / Math.max(1, vids.length);
             src.connect(gain).connect(dest);
             connected++;
-          } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
+          } catch (e) { /* skip a speaker whose audio can't be tapped this pass */ }
         }
         if (connected) audioTracks = dest.stream.getAudioTracks();
       } catch (e) { audioCtx = null; }

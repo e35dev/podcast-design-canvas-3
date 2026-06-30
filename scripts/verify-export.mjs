@@ -3,8 +3,10 @@
 // upload two generated speaker videos, enter distinct social links, choose a
 // preset, click the real Export action, and confirm a genuinely playable video
 // file is produced from the live canvas composition (loads back into a <video>
-// with real dimensions, and the byte payload is non-trivial). The exported file
-// reflects the selected preset. No fixtures, seeded media, or verifier-only
+// with real dimensions, and the byte payload is non-trivial). It also confirms
+// the file carries the mixed speaker audio and that a second consecutive export
+// still has audio (guarding against the silent-on-re-export regression). The
+// exported file reflects the selected preset. No fixtures, seeded media, or verifier-only
 // paths: media is generated in-browser, links are typed into the real inputs,
 // and the artifact is read from the product's own download link. Mirrors the
 // CDP harness used by the other rendered checks.
@@ -145,12 +147,40 @@ const browserExpression = `
   await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
   assert(v.videoWidth > 0 && v.videoHeight > 0, "exported file should be a playable video with real dimensions");
 
+  // The export must carry the mixed speaker audio — and keep carrying it across
+  // repeated exports (re-export after a tweak is a normal step). decodeAudioData
+  // throws when a file has no decodable audio track, so it doubles as the check.
+  async function audioOf(blobHref) {
+    const buf = await (await fetch(blobHref)).arrayBuffer();
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      const decoded = await ac.decodeAudioData(buf.slice(0));
+      return decoded.numberOfChannels > 0 && decoded.length > 0;
+    } finally { try { await ac.close(); } catch (e) {} }
+  }
+  let firstHasAudio = false;
+  try { firstHasAudio = await audioOf(href); } catch (e) { firstHasAudio = false; }
+  assert(firstHasAudio, "the exported file should contain mixed speaker audio");
+
+  // Export a SECOND time and confirm the new file still has audio (regression:
+  // the old createMediaElementSource path produced a silent second export).
+  const firstHref = href;
+  document.querySelector("#export").click();
+  await waitFor(() => { const d = document.querySelector("#export-download"); return d && d.getAttribute("href") !== firstHref; }, "a second export should produce a fresh result", 700);
+  const secondHref = document.querySelector("#export-download").getAttribute("href");
+  assert(secondHref && secondHref.indexOf("blob:") === 0 && secondHref !== firstHref, "second export should yield a distinct real blob");
+  let secondHasAudio = false;
+  try { secondHasAudio = await audioOf(secondHref); } catch (e) { secondHasAudio = false; }
+  assert(secondHasAudio, "a second consecutive export should still contain audio, not be silent");
+
   return {
     presetExported: document.querySelector("#stage-canvas").dataset.preset,
     bytes: blob.size,
     type: blob.type,
     dimensions: v.videoWidth + "x" + v.videoHeight,
     downloadName: link.getAttribute("download"),
+    firstHasAudio,
+    secondHasAudio,
   };
 })()
 `;
