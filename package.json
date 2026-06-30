@@ -1,0 +1,15 @@
+{
+  "name": "podcast-design-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Compose uploaded or recorded speaker videos into a playable preview — the first real media-to-preview path.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "node scripts/lint.mjs",
+    "test": "node --test",
+    "preview-build": "node scripts/preview-build.mjs",
+    "verify:rendered": "node scripts/rendered-verify.mjs"
+  },
+  "license": "MIT"
+}
