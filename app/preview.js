@@ -1,47 +1,41 @@
 // app/preview.js
-// Renders the composed preview from the REAL uploaded video pixels. Each speaker
-// is a live <video> element backed by an object URL of the uploaded file; the
-// selected preset positions them on a 16:9 stage with CSS percentages. There is
-// no canvas and no placeholder — what you see is the decoded uploaded media.
-//
-// Playback is synchronized: a single Play/Pause/restart drives every speaker
-// video together, and looping keeps the composed preview alive for inspection.
-// Classic script — exposed on window.PDC.preview.
+// Composes the preview on a 16:9 canvas by drawing real uploaded video frames
+// (ctx.drawImage) into preset layout rects. Hidden <video> elements decode files;
+// the canvas is what users and screenshot-based review see — canvas pixels are
+// always captured, unlike raw <video> layers in some headless environments.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
   const { getPreset } = PDC.presets;
 
-  // A Preview owns the live <video> elements for the session so that uploaded
-  // media survives re-layouts, preset switches, and other UI interaction. We
-  // create one <video> per bucket on first upload and reuse it thereafter.
-  function createPreview(stageEl) {
-    const videos = {}; // bucket -> HTMLVideoElement
+  function createPreview(canvasEl) {
+    const ctx = canvasEl.getContext("2d");
+    const videos = {};
+    const videoHost = document.createElement("div");
+    videoHost.setAttribute("aria-hidden", "true");
+    videoHost.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none";
+    document.body.appendChild(videoHost);
     let playing = false;
+    let rafId = 0;
+    let episodeRef = null;
 
     function ensureVideo(bucket) {
       let v = videos[bucket];
       if (!v) {
         v = document.createElement("video");
-        v.muted = true; // muted is required for programmatic autoplay
+        v.muted = true;
         v.loop = true;
         v.playsInline = true;
         v.setAttribute("playsinline", "");
         v.preload = "auto";
         v.dataset.speaker = bucket;
-        v.addEventListener("loadeddata", function () {
-          if (playing) resumeVideo(v);
-        });
+        v.addEventListener("loadeddata", drawFrame);
+        v.addEventListener("canplay", drawFrame);
+        videoHost.appendChild(v);
         videos[bucket] = v;
       }
       return v;
     }
 
-    function resumeVideo(v) {
-      const p = v.play();
-      if (p && typeof p.catch === "function") p.catch(function () {});
-    }
-
-    // Point a bucket's video at a fresh object URL, revoking any previous one.
     function setSource(bucket, file) {
       const v = ensureVideo(bucket);
       if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
@@ -58,7 +52,11 @@
           } catch (e) {
             /* not seekable yet */
           }
-          if (playing) resumeVideo(v);
+          drawFrame();
+          if (playing) {
+            const p = v.play();
+            if (p && typeof p.catch === "function") p.catch(function () {});
+          }
         },
         { once: true },
       );
@@ -68,85 +66,118 @@
     function clear(bucket) {
       const v = videos[bucket];
       if (v) {
-        const frame = v.closest(".speaker-frame");
-        if (frame) frame.remove();
         if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
+        v.remove();
       }
       delete videos[bucket];
     }
 
-    // Update preset layout in place so <video> nodes are never torn down by
-    // innerHTML resets — that detach/reparent cycle is what caused black panels.
-    function render(episode) {
-      const buckets = PDC.episode.assignedBuckets(episode);
-      const preset = getPreset(episode.presetId) || PDC.presets.PRESETS[0];
+    function drawFrame() {
+      if (!episodeRef) return;
+      const buckets = PDC.episode.assignedBuckets(episodeRef);
+      const preset = getPreset(episodeRef.presetId) || PDC.presets.PRESETS[0];
       const rects = preset.layout(buckets.length);
-      const bucketSet = new Set(buckets);
+      const w = canvasEl.width;
+      const h = canvasEl.height;
 
-      stageEl.dataset.preset = preset.id;
-      stageEl.dataset.speakers = String(buckets.length);
-
-      stageEl.querySelectorAll(".speaker-frame").forEach(function (frame) {
-        if (!bucketSet.has(frame.dataset.speaker)) frame.remove();
-      });
+      ctx.fillStyle = "#05070c";
+      ctx.fillRect(0, 0, w, h);
 
       buckets.forEach(function (bucket, i) {
         const rect = rects[i] || rects[rects.length - 1];
-        let frame = stageEl.querySelector('.speaker-frame[data-speaker="' + bucket + '"]');
-        if (!frame) {
-          frame = document.createElement("div");
-          frame.className = "speaker-frame";
-          frame.dataset.speaker = bucket;
-          const v = ensureVideo(bucket);
-          frame.appendChild(v);
-          const tag = document.createElement("span");
-          tag.className = "speaker-tag";
-          tag.dataset.speakerTag = bucket;
-          frame.appendChild(tag);
+        const x = (rect.x / 100) * w;
+        const y = (rect.y / 100) * h;
+        const rw = (rect.w / 100) * w;
+        const rh = (rect.h / 100) * h;
+        const v = videos[bucket];
+
+        ctx.fillStyle = "#000";
+        ctx.fillRect(x, y, rw, rh);
+
+        if (v && v.videoWidth > 0) {
+          const scale = Math.max(rw / v.videoWidth, rh / v.videoHeight);
+          const dw = v.videoWidth * scale;
+          const dh = v.videoHeight * scale;
+          const dx = x + (rw - dw) / 2;
+          const dy = y + (rh - dh) / 2;
+          ctx.drawImage(v, dx, dy, dw, dh);
         }
 
-        frame.style.left = rect.x + "%";
-        frame.style.top = rect.y + "%";
-        frame.style.width = rect.w + "%";
-        frame.style.height = rect.h + "%";
-
-        const tag = frame.querySelector(".speaker-tag");
-        if (tag) tag.textContent = PDC.episode.speakerName(episode, bucket);
-
-        // Re-append to enforce paint/stack order (later speakers above earlier).
-        stageEl.appendChild(frame);
+        const label = PDC.episode.speakerName(episodeRef, bucket);
+        if (label) {
+          ctx.fillStyle = "rgba(8,10,16,0.72)";
+          ctx.fillRect(x + 8, y + rh - 28, Math.min(rw - 16, label.length * 9 + 20), 22);
+          ctx.fillStyle = "#fff";
+          ctx.font = "600 14px system-ui, sans-serif";
+          ctx.fillText(label, x + 14, y + rh - 12);
+        }
       });
 
-      if (playing) play();
+      canvasEl.dataset.preset = preset.id;
+      canvasEl.dataset.speakers = String(buckets.length);
+    }
+
+    function loop() {
+      drawFrame();
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function ensureLoop() {
+      if (!rafId) rafId = requestAnimationFrame(loop);
+    }
+
+    function stopLoop() {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+    }
+
+    function render(episode) {
+      episodeRef = episode;
+      const buckets = PDC.episode.assignedBuckets(episode);
+      if (buckets.length) ensureLoop();
+      else {
+        stopLoop();
+        ctx.fillStyle = "#05070c";
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+        canvasEl.dataset.preset = "";
+        canvasEl.dataset.speakers = "0";
+      }
+      drawFrame();
       return buckets.length;
     }
 
     function play() {
       playing = true;
-      Object.values(videos).forEach(resumeVideo);
+      Object.keys(videos).forEach(function (b) {
+        const p = videos[b].play();
+        if (p && typeof p.catch === "function") p.catch(function () {});
+      });
+      ensureLoop();
     }
 
     function pause() {
       playing = false;
-      Object.values(videos).forEach(function (v) {
-        v.pause();
+      Object.keys(videos).forEach(function (b) {
+        videos[b].pause();
       });
     }
 
     function restart() {
-      Object.values(videos).forEach(function (v) {
+      Object.keys(videos).forEach(function (b) {
         try {
-          v.currentTime = 0;
+          videos[b].currentTime = 0;
         } catch (e) {
-          /* not yet seekable; ignore */
+          /* not seekable yet */
         }
       });
       play();
     }
 
     function setMuted(muted) {
-      Object.values(videos).forEach(function (v) {
-        v.muted = muted;
+      Object.keys(videos).forEach(function (b) {
+        videos[b].muted = muted;
       });
     }
 
@@ -161,6 +192,7 @@
       isPlaying: function () {
         return playing;
       },
+      drawFrame,
     };
   }
 

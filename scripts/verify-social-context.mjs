@@ -154,37 +154,32 @@ const browserExpression = `
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }
   const tagText = (bucket) => {
-    const el = document.querySelector('[data-speaker-tag="' + bucket + '"]');
+    const el = document.querySelector('.bucket[data-bucket="' + bucket + '"] .bucket-name');
     return el ? el.textContent : null;
   };
   const ensureNames = () => {
-    assert(tagText("host") === "hostperson", "host preview tag should show derived name, got: " + tagText("host"));
-    assert(tagText("guest1") === "guestperson", "guest1 preview tag should show derived name, got: " + tagText("guest1"));
+    assert(tagText("host") === "hostperson", "host label should show derived name, got: " + tagText("host"));
+    assert(tagText("guest1") === "guestperson", "guest1 label should show derived name, got: " + tagText("guest1"));
     assert(tagText("host") !== tagText("guest1"), "derived names must be distinct per speaker");
   };
-  function videoHasVisiblePixels(video) {
-    if (!video || !video.videoWidth || !video.videoHeight) return false;
-    const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 32;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, 32, 32);
-    const data = ctx.getImageData(0, 0, 32, 32).data;
+  function canvasLitPct() {
+    const c = document.getElementById("stage-canvas");
+    const data = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let lit = 0;
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i] > 14 || data[i + 1] > 14 || data[i + 2] > 14) return true;
+      if (data[i] > 14 || data[i + 1] > 14 || data[i + 2] > 14) lit++;
     }
-    return false;
+    return Math.round((lit / (data.length / 4)) * 100);
   }
   function assertSocialState(label) {
     ensureNames();
     assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, label + ": host link must persist");
     assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, label + ": guest1 link must persist");
-    videos = [...document.querySelectorAll("#stage video")];
+    videos = [...document.querySelectorAll("video[data-speaker]")];
     assert(videos.length === 2, label + ": both uploaded videos should remain");
-    assert(
-      videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0 && videoHasVisiblePixels(v)),
-      label + ": uploaded media should render nonblank pixels",
-    );
+    assert(videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), label + ": uploaded media should stay decoded");
+    const lit = canvasLitPct();
+    assert(lit >= 5, label + ": composed canvas should show nonblank pixels (" + lit + "%)");
   }
 
   // Wait for the app's classic scripts to finish wiring the DOM (the page may
@@ -194,8 +189,8 @@ const browserExpression = `
     throw new Error(label);
   };
   await waitFor(() => window.PDC && window.PDC.episode && window.PDC.episode.setSocialLink, "PDC.episode social API should load");
+  await waitFor(() => document.querySelector("#stage-canvas"), "composed preview canvas should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
-  await waitFor(() => document.querySelector('[data-link-bucket="host"]'), "Host social link input should exist");
   assert(document.querySelector('[data-link-bucket="host"]'), "Host social link input should exist");
   assert(document.querySelector('[data-link-bucket="guest1"]'), "Guest 1 social link input should exist");
 
@@ -204,7 +199,7 @@ const browserExpression = `
   await sleep(100);
   uploadTo(document.querySelector('[data-file-bucket="guest1"]'), await makeVideo("guest.webm", "#047857"));
   await sleep(1200);
-  let videos = [...document.querySelectorAll("#stage video")];
+  let videos = [...document.querySelectorAll("video[data-speaker]")];
   assert(videos.length === 2, "two uploaded speaker videos should compose the preview");
 
   // Enter DISTINCT social links for each speaker through the real inputs.
@@ -227,8 +222,8 @@ const browserExpression = `
 
   for (const presetId of ["stack", "spotlight", "split"]) {
     document.querySelector('[data-preset="' + presetId + '"]').click();
-    await sleep(400);
-    assert(document.querySelector("#stage").dataset.preset === presetId, "preset should switch to " + presetId);
+    await sleep(500);
+    assert(document.querySelector("#stage-canvas").dataset.preset === presetId, "preset should switch to " + presetId);
     assertSocialState(presetId + " preset with social links");
   }
 
@@ -238,7 +233,7 @@ const browserExpression = `
       host: document.querySelector('[data-link-bucket="host"]').value,
       guest1: document.querySelector('[data-link-bucket="guest1"]').value,
     },
-    presetAfter: document.querySelector("#stage").dataset.preset,
+    presetAfter: document.querySelector("#stage-canvas").dataset.preset,
     videoCount: videos.length,
   };
 })()

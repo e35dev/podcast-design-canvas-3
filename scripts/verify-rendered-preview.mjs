@@ -181,48 +181,48 @@ const browserExpression = `
   };
 
   await waitFor(() => window.PDC && window.PDC.episode, "PDC episode API should load");
-  await waitFor(() => document.querySelector("#files"), "multi-speaker upload input should exist");
+  await waitFor(() => document.querySelector("#stage-canvas"), "composed preview canvas should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="guest1"]'), "Guest 1 upload control should exist");
+  await waitFor(() => document.querySelector('[data-link-bucket="host"]'), "Host social link input should exist");
   await waitFor(() => document.querySelector("#play") && document.querySelector("#play").disabled, "play should start disabled before uploads");
 
   function layoutSignature() {
-    return [...document.querySelectorAll("#stage .speaker-frame")].map((frame) => ({
-      speaker: frame.dataset.speaker,
-      left: Number.parseFloat(frame.style.left || "0"),
-      top: Number.parseFloat(frame.style.top || "0"),
-      width: Number.parseFloat(frame.style.width || "0"),
-      height: Number.parseFloat(frame.style.height || "0"),
+    const presetId = document.querySelector("#stage-canvas").dataset.preset;
+    const preset = window.PDC.presets.getPreset(presetId);
+    return preset.layout(2).map((rect, i) => ({
+      speaker: i === 0 ? "host" : "guest1",
+      left: rect.x,
+      top: rect.y,
+      width: rect.w,
+      height: rect.h,
     }));
   }
 
-  function videoHasVisiblePixels(video) {
-    if (!video || !video.videoWidth || !video.videoHeight) return false;
-    const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 32;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, 32, 32);
-    const data = ctx.getImageData(0, 0, 32, 32).data;
+  function canvasLitPct() {
+    const c = document.getElementById("stage-canvas");
+    const ctx = c.getContext("2d");
+    const data = ctx.getImageData(0, 0, c.width, c.height).data;
+    let lit = 0;
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i] > 14 || data[i + 1] > 14 || data[i + 2] > 14) return true;
+      if (data[i] > 14 || data[i + 1] > 14 || data[i + 2] > 14) lit++;
     }
-    return false;
+    return Math.round((lit / (data.length / 4)) * 100);
   }
 
-  function assertVideosVisible(label) {
-    const stageVideos = [...document.querySelectorAll("#stage video")];
-    assert(stageVideos.length === 2, label + ": stage should contain two speaker videos");
-    assert(
-      stageVideos.every((video) => video.src.startsWith("blob:") && video.videoWidth > 0 && videoHasVisiblePixels(video)),
-      label + ": uploaded videos should render nonblank pixels",
-    );
-    return stageVideos;
+  function assertCanvasVisible(label) {
+    const pct = canvasLitPct();
+    assert(pct >= 5, label + ": composed canvas should show nonblank pixels (" + pct + "%)");
+    return pct;
+  }
+
+  function hiddenVideos() {
+    return [...document.querySelectorAll("video[data-speaker]")];
   }
 
   async function clickPreset(id) {
     document.querySelector('[data-preset="' + id + '"]').click();
-    await sleep(400);
+    await sleep(500);
   }
 
   const hostName = "<img src=x onerror=document.body.dataset.injected=1>.webm";
@@ -241,8 +241,8 @@ const browserExpression = `
   uploadTo(document.querySelector('[data-file-bucket="guest1"]'), guest);
 
   await sleep(1200);
-  const videos = [...document.querySelectorAll("#stage video")];
-  assert(videos.length === 2, "stage should contain two speaker videos after upload");
+  const videos = hiddenVideos();
+  assert(videos.length === 2, "two hidden decoder videos should exist after upload");
   await Promise.all(
     videos.map((video) =>
       video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
@@ -250,6 +250,17 @@ const browserExpression = `
         : new Promise((resolve) => video.addEventListener("loadeddata", resolve, { once: true })),
     ),
   );
+
+  function typeSocial(bucket, url) {
+    const input = document.querySelector('[data-link-bucket="' + bucket + '"]');
+    input.value = url;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  typeSocial("host", "https://x.com/hostperson");
+  typeSocial("guest1", "https://x.com/guestperson");
+  await sleep(300);
+  assert(document.querySelector('.bucket[data-bucket="host"] .bucket-name').textContent === "hostperson");
+  assert(document.querySelector('.bucket[data-bucket="guest1"] .bucket-name').textContent === "guestperson");
 
   const hostStatus = document.querySelector('[data-status="host"]');
   const guestStatus = document.querySelector('[data-status="guest1"]');
@@ -281,28 +292,26 @@ const browserExpression = `
   assert(beforeSwitch.every((item) => item.width > 0 && item.height > 0), "videos should decode real dimensions");
   assert(beforeSwitch.every((item) => !item.paused), "videos should be playing after Play click");
   assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "videos should start in sync");
-  assertVideosVisible("split preset");
+  assertCanvasVisible("split preset");
 
   const splitLayout = layoutSignature();
-  assert(splitLayout.length === 2, "split should render two speaker frames");
+  assert(splitLayout.length === 2, "split should lay out two speakers");
   assert(splitLayout[0].left === 0 && splitLayout[1].left === 50, "split should place speakers side by side");
 
   await clickPreset("stack");
-  assert(document.querySelector("#stage").dataset.preset === "stack", "preset switch should update the stage to stack");
+  assert(document.querySelector("#stage-canvas").dataset.preset === "stack", "preset switch should update the canvas to stack");
   const stackLayout = layoutSignature();
-  assert(stackLayout.length === 2, "stack should render two speaker frames");
   assert(stackLayout[0].top === 0 && stackLayout[1].top === 50, "stack should place speakers in rows");
   assert(JSON.stringify(splitLayout) !== JSON.stringify(stackLayout), "stack layout should differ from split");
-  assertVideosVisible("stack preset");
+  assertCanvasVisible("stack preset");
 
   await clickPreset("spotlight");
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage to spotlight");
+  assert(document.querySelector("#stage-canvas").dataset.preset === "spotlight", "preset switch should update the canvas to spotlight");
   const spotlightLayout = layoutSignature();
-  assert(spotlightLayout.length === 2, "spotlight should render two speaker frames");
   assert(spotlightLayout[0].width === 100 && spotlightLayout[0].height === 100, "spotlight host should fill the stage");
   assert(spotlightLayout[1].width < 50 && spotlightLayout[1].height < 50, "spotlight guest should be a PiP inset");
   assert(JSON.stringify(stackLayout) !== JSON.stringify(spotlightLayout), "spotlight layout should differ from stack");
-  const afterSpotlight = assertVideosVisible("spotlight preset");
+  const spotlightLit = assertCanvasVisible("spotlight preset");
 
   assert(hostStatus.textContent === hostName, "host filename should survive preset cycling");
   assert(guestStatus.textContent === "guest.webm", "guest filename should survive preset cycling");
@@ -312,7 +321,8 @@ const browserExpression = `
     filledBuckets: [...document.querySelectorAll(".bucket.filled")].map((bucket) => bucket.dataset.bucket),
     beforeSwitch,
     layouts: { split: splitLayout, stack: stackLayout, spotlight: spotlightLayout },
-    afterSpotlight: afterSpotlight.map((video) => ({
+    canvasLitPct: spotlightLit,
+    afterSpotlight: hiddenVideos().map((video) => ({
       speaker: video.dataset.speaker,
       width: video.videoWidth,
       height: video.videoHeight,

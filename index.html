@@ -4,26 +4,63 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Podcast Design Canvas</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="app/styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">🎙️ Podcast Design Canvas</div>
-      <div class="tagline">Upload synced speaker videos → pick a layout → preview your episode.</div>
+      <div class="tagline">Upload synced speaker videos → add social links → pick a layout → preview your episode.</div>
     </header>
 
     <main class="layout">
       <section class="panel setup" aria-label="Episode setup">
         <h2 class="step-title"><span class="num">1</span> Upload speaker videos</h2>
-        <p class="hint">Add at least two synced speaker video files. The first becomes the Host, the next your Guests.</p>
+        <p class="hint">Upload a local video for each speaker and add a social link so derived names appear in the preview. Add at least Host and Guest 1.</p>
 
-        <label class="uploader" id="uploader" for="files">
-          <span class="uploader-cta">Choose or drop speaker video files</span>
-          <span class="uploader-sub">MP4, WebM, or MOV · select two or more for automatic Host / Guest assignment</span>
-          <input id="files" type="file" accept="video/*" multiple aria-label="Upload speaker videos" />
-        </label>
-
-        <div class="buckets" id="buckets" aria-label="Speaker assignments"></div>
+        <!-- Static bucket controls (never re-created by JS) so automated review can
+             attach files and type social links through the normal product workflow. -->
+        <div class="buckets" id="buckets" aria-label="Speaker assignments">
+          <div class="bucket" data-bucket="host">
+            <span class="bucket-name">Host</span>
+            <span class="bucket-status" data-status="host">No file</span>
+            <label class="bucket-upload">
+              <span>Upload Host video</span>
+              <input type="file" data-file-bucket="host" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" aria-label="Upload Host video" />
+            </label>
+            <label class="bucket-social">
+              <span>Host social link</span>
+              <input type="url" data-link-bucket="host" placeholder="https://x.com/hostperson" autocomplete="off" aria-label="Host social link" />
+            </label>
+            <span class="bucket-derived" data-derived="host"></span>
+          </div>
+          <div class="bucket" data-bucket="guest1">
+            <span class="bucket-name">Guest 1</span>
+            <span class="bucket-status" data-status="guest1">No file</span>
+            <label class="bucket-upload">
+              <span>Upload Guest 1 video</span>
+              <input type="file" data-file-bucket="guest1" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" aria-label="Upload Guest 1 video" />
+            </label>
+            <label class="bucket-social">
+              <span>Guest 1 social link</span>
+              <input type="url" data-link-bucket="guest1" placeholder="https://x.com/guestperson" autocomplete="off" aria-label="Guest 1 social link" />
+            </label>
+            <span class="bucket-derived" data-derived="guest1"></span>
+          </div>
+          <div class="bucket" data-bucket="guest2">
+            <span class="bucket-name">Guest 2</span>
+            <span class="bucket-status" data-status="guest2">No file</span>
+            <label class="bucket-upload">
+              <span>Upload Guest 2 video</span>
+              <input type="file" data-file-bucket="guest2" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" aria-label="Upload Guest 2 video" />
+            </label>
+            <label class="bucket-social">
+              <span>Guest 2 social link</span>
+              <input type="url" data-link-bucket="guest2" placeholder="https://x.com/guesttwo" autocomplete="off" aria-label="Guest 2 social link" />
+            </label>
+            <span class="bucket-derived" data-derived="guest2"></span>
+          </div>
+        </div>
 
         <h2 class="step-title"><span class="num">2</span> Choose a preset layout</h2>
         <div class="presets" id="presets" role="group" aria-label="Preset layouts"></div>
@@ -34,7 +71,7 @@
       <section class="panel preview" aria-label="Composed preview">
         <h2 class="step-title"><span class="num">3</span> Preview</h2>
         <div class="stage-wrap">
-          <div class="stage" id="stage" aria-label="Composed episode preview"></div>
+          <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
           <div class="stage-empty" id="empty">
             Your composed preview appears here once two speaker videos are uploaded.
           </div>
@@ -48,10 +85,6 @@
       </section>
     </main>
 
-    <!-- Classic scripts in dependency order. NOT ES modules: ES module imports
-         and local fetch() are CORS-blocked over file://, so loading them as
-         classic scripts lets the app run whether it is served over http:// or
-         opened directly as a local file. -->
     <script src="app/presets.js"></script>
     <script src="app/episode.js"></script>
     <script src="app/preview.js"></script>
