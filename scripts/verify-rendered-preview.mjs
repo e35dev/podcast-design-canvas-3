@@ -1,10 +1,7 @@
 // scripts/verify-rendered-preview.mjs
-// Drives the shipped app in headless Chrome and proves the active #32 workflow:
-// upload two local video files through the real file input, assign Host/Guest
-// buckets, render decoded uploaded pixels in the composed preview, and preserve
-// those videos across an ordinary preset switch. No fixtures or product-only
-// shortcuts are used; the WebM files are generated in-browser and uploaded as
-// real File objects through the visible input.
+// Drives the shipped app in headless Chrome and proves issue #41: upload Host +
+// Guest videos, confirm nonblank decoded pixels, and visibly recompose across
+// Split, Stack, and Spotlight without losing uploaded media.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -174,10 +171,59 @@ const browserExpression = `
   }
 
   assert(window.PDC, "PDC namespace should load");
-  assert(document.querySelector("#files"), "multi-speaker upload input should exist");
-  assert(document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
-  assert(document.querySelector('[data-file-bucket="guest1"]'), "Guest 1 upload control should exist");
-  assert(document.querySelector("#play").disabled, "play should start disabled before uploads");
+
+  const waitFor = async (fn, label) => {
+    for (let i = 0; i < 120; i++) {
+      if (fn()) return;
+      await sleep(50);
+    }
+    throw new Error(label);
+  };
+
+  await waitFor(() => window.PDC && window.PDC.episode, "PDC episode API should load");
+  await waitFor(() => document.querySelector("#files"), "multi-speaker upload input should exist");
+  await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
+  await waitFor(() => document.querySelector('[data-file-bucket="guest1"]'), "Guest 1 upload control should exist");
+  await waitFor(() => document.querySelector("#play") && document.querySelector("#play").disabled, "play should start disabled before uploads");
+
+  function layoutSignature() {
+    return [...document.querySelectorAll("#stage .speaker-frame")].map((frame) => ({
+      speaker: frame.dataset.speaker,
+      left: Number.parseFloat(frame.style.left || "0"),
+      top: Number.parseFloat(frame.style.top || "0"),
+      width: Number.parseFloat(frame.style.width || "0"),
+      height: Number.parseFloat(frame.style.height || "0"),
+    }));
+  }
+
+  function videoHasVisiblePixels(video) {
+    if (!video || !video.videoWidth || !video.videoHeight) return false;
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, 32, 32);
+    const data = ctx.getImageData(0, 0, 32, 32).data;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 14 || data[i + 1] > 14 || data[i + 2] > 14) return true;
+    }
+    return false;
+  }
+
+  function assertVideosVisible(label) {
+    const stageVideos = [...document.querySelectorAll("#stage video")];
+    assert(stageVideos.length === 2, label + ": stage should contain two speaker videos");
+    assert(
+      stageVideos.every((video) => video.src.startsWith("blob:") && video.videoWidth > 0 && videoHasVisiblePixels(video)),
+      label + ": uploaded videos should render nonblank pixels",
+    );
+    return stageVideos;
+  }
+
+  async function clickPreset(id) {
+    document.querySelector('[data-preset="' + id + '"]').click();
+    await sleep(400);
+  }
 
   const hostName = "<img src=x onerror=document.body.dataset.injected=1>.webm";
   const host = await makeVideo(hostName, "#b91c1c");
@@ -235,25 +281,43 @@ const browserExpression = `
   assert(beforeSwitch.every((item) => item.width > 0 && item.height > 0), "videos should decode real dimensions");
   assert(beforeSwitch.every((item) => !item.paused), "videos should be playing after Play click");
   assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "videos should start in sync");
+  assertVideosVisible("split preset");
 
-  document.querySelector('[data-preset="spotlight"]').click();
-  await sleep(300);
-  const afterSwitch = [...document.querySelectorAll("#stage video")].map((video) => ({
-    speaker: video.dataset.speaker,
-    width: video.videoWidth,
-    height: video.videoHeight,
-    srcIsBlob: video.src.startsWith("blob:"),
-  }));
+  const splitLayout = layoutSignature();
+  assert(splitLayout.length === 2, "split should render two speaker frames");
+  assert(splitLayout[0].left === 0 && splitLayout[1].left === 50, "split should place speakers side by side");
 
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
-  assert(afterSwitch.length === 2, "preset switch should preserve both uploaded videos");
-  assert(afterSwitch.every((item) => item.srcIsBlob && item.width > 0 && item.height > 0), "preset switch should keep decoded upload media");
+  await clickPreset("stack");
+  assert(document.querySelector("#stage").dataset.preset === "stack", "preset switch should update the stage to stack");
+  const stackLayout = layoutSignature();
+  assert(stackLayout.length === 2, "stack should render two speaker frames");
+  assert(stackLayout[0].top === 0 && stackLayout[1].top === 50, "stack should place speakers in rows");
+  assert(JSON.stringify(splitLayout) !== JSON.stringify(stackLayout), "stack layout should differ from split");
+  assertVideosVisible("stack preset");
+
+  await clickPreset("spotlight");
+  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage to spotlight");
+  const spotlightLayout = layoutSignature();
+  assert(spotlightLayout.length === 2, "spotlight should render two speaker frames");
+  assert(spotlightLayout[0].width === 100 && spotlightLayout[0].height === 100, "spotlight host should fill the stage");
+  assert(spotlightLayout[1].width < 50 && spotlightLayout[1].height < 50, "spotlight guest should be a PiP inset");
+  assert(JSON.stringify(stackLayout) !== JSON.stringify(spotlightLayout), "spotlight layout should differ from stack");
+  const afterSpotlight = assertVideosVisible("spotlight preset");
+
+  assert(hostStatus.textContent === hostName, "host filename should survive preset cycling");
+  assert(guestStatus.textContent === "guest.webm", "guest filename should survive preset cycling");
 
   return {
     readiness: document.querySelector("#readiness").textContent,
     filledBuckets: [...document.querySelectorAll(".bucket.filled")].map((bucket) => bucket.dataset.bucket),
     beforeSwitch,
-    afterSwitch,
+    layouts: { split: splitLayout, stack: stackLayout, spotlight: spotlightLayout },
+    afterSpotlight: afterSpotlight.map((video) => ({
+      speaker: video.dataset.speaker,
+      width: video.videoWidth,
+      height: video.videoHeight,
+      srcIsBlob: video.src.startsWith("blob:"),
+    })),
   };
 })()
 `;
@@ -287,7 +351,7 @@ async function main() {
       expression: browserExpression,
       awaitPromise: true,
       returnByValue: true,
-      timeout: 15000,
+      timeout: 25000,
     });
     ws.close();
 

@@ -1,12 +1,8 @@
 // scripts/verify-social-context.mjs
-// Drives the shipped app in headless Chrome and proves the active #39 workflow:
-// upload Host + Guest 1 videos through the real file inputs, enter DISTINCT
-// social/profile links for each speaker through the visible link inputs, confirm
-// the links are stored per speaker and surface as derived names in the composed
-// preview, and confirm both the links and the uploaded media survive a preset
-// switch. No fixtures or product-only shortcuts: the WebM files are generated
-// in-browser and uploaded as real File objects, and the links are typed into the
-// real inputs. Mirrors scripts/verify-rendered-preview.mjs's CDP harness.
+// Drives the shipped app in headless Chrome and proves issue #41's full workflow:
+// upload Host + Guest videos, enter distinct social links, confirm derived names
+// in the preview, cycle Split → Stack → Spotlight with nonblank video, and keep
+// uploads + social context intact throughout.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -161,6 +157,35 @@ const browserExpression = `
     const el = document.querySelector('[data-speaker-tag="' + bucket + '"]');
     return el ? el.textContent : null;
   };
+  const ensureNames = () => {
+    assert(tagText("host") === "hostperson", "host preview tag should show derived name, got: " + tagText("host"));
+    assert(tagText("guest1") === "guestperson", "guest1 preview tag should show derived name, got: " + tagText("guest1"));
+    assert(tagText("host") !== tagText("guest1"), "derived names must be distinct per speaker");
+  };
+  function videoHasVisiblePixels(video) {
+    if (!video || !video.videoWidth || !video.videoHeight) return false;
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, 32, 32);
+    const data = ctx.getImageData(0, 0, 32, 32).data;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 14 || data[i + 1] > 14 || data[i + 2] > 14) return true;
+    }
+    return false;
+  }
+  function assertSocialState(label) {
+    ensureNames();
+    assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, label + ": host link must persist");
+    assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, label + ": guest1 link must persist");
+    videos = [...document.querySelectorAll("#stage video")];
+    assert(videos.length === 2, label + ": both uploaded videos should remain");
+    assert(
+      videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0 && videoHasVisiblePixels(v)),
+      label + ": uploaded media should render nonblank pixels",
+    );
+  }
 
   // Wait for the app's classic scripts to finish wiring the DOM (the page may
   // still be loading when this evaluates), then assert the controls exist.
@@ -190,22 +215,22 @@ const browserExpression = `
   await sleep(300);
 
   // Links stored per speaker and surfaced as distinct derived names in preview.
-  assert(tagText("host") === "hostperson", "host preview tag should show derived name, got: " + tagText("host"));
-  assert(tagText("guest1") === "guestperson", "guest1 preview tag should show derived name, got: " + tagText("guest1"));
-  assert(tagText("host") !== tagText("guest1"), "derived names must be distinct per speaker");
+  ensureNames();
   assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "host link input should hold its value");
   assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, "guest1 link input should hold its value");
   assert(/hostperson/.test((document.querySelector('[data-derived="host"]') || {}).textContent || ""), "host derived-name hint should show");
 
-  // Switch preset: links + uploaded media must both survive.
-  document.querySelector('[data-preset="spotlight"]').click();
-  await sleep(300);
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
-  videos = [...document.querySelectorAll("#stage video")];
-  assert(videos.length === 2, "both uploaded videos should survive the preset switch");
-  assert(videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), "uploaded media should still be decoded after switch");
-  assert(tagText("host") === "hostperson" && tagText("guest1") === "guestperson", "social-derived names must persist across preset switch");
-  assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "host link must persist across preset switch");
+  const playButton = document.querySelector("#play");
+  if (!playButton.textContent.includes("Pause")) playButton.click();
+  await sleep(700);
+  assertSocialState("split preset with social links");
+
+  for (const presetId of ["stack", "spotlight", "split"]) {
+    document.querySelector('[data-preset="' + presetId + '"]').click();
+    await sleep(400);
+    assert(document.querySelector("#stage").dataset.preset === presetId, "preset should switch to " + presetId);
+    assertSocialState(presetId + " preset with social links");
+  }
 
   return {
     tags: { host: tagText("host"), guest1: tagText("guest1") },
@@ -248,7 +273,7 @@ async function main() {
       expression: browserExpression,
       awaitPromise: true,
       returnByValue: true,
-      timeout: 20000,
+      timeout: 30000,
     });
     ws.close();
 

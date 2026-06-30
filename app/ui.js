@@ -35,7 +35,10 @@
         c.classList.toggle("selected", on);
         c.setAttribute("aria-pressed", String(on));
       });
-      if (canCompose(episode)) preview.render(episode);
+      if (canCompose(episode)) {
+        preview.render(episode);
+        preview.play();
+      }
       refresh();
     });
     presetsEl.appendChild(btn);
@@ -165,7 +168,10 @@
       linkInput.addEventListener("input", (e) => {
         setSocialLink(episode, bucket, e.target.value);
         updateDerived();
-        if (canCompose(episode)) preview.render(episode); // refresh name tags live
+        if (canCompose(episode)) {
+          preview.render(episode);
+          preview.play();
+        }
       });
       social.append(socialText, linkInput);
       row.append(social, derived);

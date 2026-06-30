@@ -28,9 +28,17 @@
         v.setAttribute("playsinline", "");
         v.preload = "auto";
         v.dataset.speaker = bucket;
+        v.addEventListener("loadeddata", function () {
+          if (playing) resumeVideo(v);
+        });
         videos[bucket] = v;
       }
       return v;
+    }
+
+    function resumeVideo(v) {
+      const p = v.play();
+      if (p && typeof p.catch === "function") p.catch(function () {});
     }
 
     // Point a bucket's video at a fresh object URL, revoking any previous one.
@@ -41,71 +49,92 @@
       v.dataset.objectUrl = url;
       v.src = url;
       v.load();
+      v.addEventListener(
+        "loadeddata",
+        function seekFirstFrame() {
+          v.removeEventListener("loadeddata", seekFirstFrame);
+          try {
+            if (v.currentTime === 0) v.currentTime = 0.001;
+          } catch (e) {
+            /* not seekable yet */
+          }
+          if (playing) resumeVideo(v);
+        },
+        { once: true },
+      );
       return v;
     }
 
     function clear(bucket) {
       const v = videos[bucket];
-      if (v && v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
+      if (v) {
+        const frame = v.closest(".speaker-frame");
+        if (frame) frame.remove();
+        if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
+      }
       delete videos[bucket];
     }
 
-    // Lay the assigned speaker videos onto the stage using the preset geometry.
-    // Rebuilding the stage children is cheap and keeps DOM order == speaker order.
+    // Update preset layout in place so <video> nodes are never torn down by
+    // innerHTML resets — that detach/reparent cycle is what caused black panels.
     function render(episode) {
       const buckets = PDC.episode.assignedBuckets(episode);
       const preset = getPreset(episode.presetId) || PDC.presets.PRESETS[0];
       const rects = preset.layout(buckets.length);
+      const bucketSet = new Set(buckets);
 
-      stageEl.innerHTML = "";
       stageEl.dataset.preset = preset.id;
       stageEl.dataset.speakers = String(buckets.length);
 
-      buckets.forEach((bucket, i) => {
+      stageEl.querySelectorAll(".speaker-frame").forEach(function (frame) {
+        if (!bucketSet.has(frame.dataset.speaker)) frame.remove();
+      });
+
+      buckets.forEach(function (bucket, i) {
         const rect = rects[i] || rects[rects.length - 1];
-        const frame = document.createElement("div");
-        frame.className = "speaker-frame";
-        frame.dataset.speaker = bucket;
+        let frame = stageEl.querySelector('.speaker-frame[data-speaker="' + bucket + '"]');
+        if (!frame) {
+          frame = document.createElement("div");
+          frame.className = "speaker-frame";
+          frame.dataset.speaker = bucket;
+          const v = ensureVideo(bucket);
+          frame.appendChild(v);
+          const tag = document.createElement("span");
+          tag.className = "speaker-tag";
+          tag.dataset.speakerTag = bucket;
+          frame.appendChild(tag);
+        }
+
         frame.style.left = rect.x + "%";
         frame.style.top = rect.y + "%";
         frame.style.width = rect.w + "%";
         frame.style.height = rect.h + "%";
 
-        const v = ensureVideo(bucket);
-        frame.appendChild(v);
+        const tag = frame.querySelector(".speaker-tag");
+        if (tag) tag.textContent = PDC.episode.speakerName(episode, bucket);
 
-        const tag = document.createElement("span");
-        tag.className = "speaker-tag";
-        tag.dataset.speakerTag = bucket;
-        // Show the name derived from the speaker's social link when one is set,
-        // otherwise the default bucket label — so the preview visibly reflects
-        // the per-speaker social context entered during setup.
-        tag.textContent = PDC.episode.speakerName(episode, bucket);
-        frame.appendChild(tag);
-
+        // Re-append to enforce paint/stack order (later speakers above earlier).
         stageEl.appendChild(frame);
       });
 
-      // Keep playing across re-layout so a preset switch doesn't freeze the preview.
       if (playing) play();
       return buckets.length;
     }
 
     function play() {
       playing = true;
-      Object.values(videos).forEach((v) => {
-        const p = v.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
-      });
+      Object.values(videos).forEach(resumeVideo);
     }
 
     function pause() {
       playing = false;
-      Object.values(videos).forEach((v) => v.pause());
+      Object.values(videos).forEach(function (v) {
+        v.pause();
+      });
     }
 
     function restart() {
-      Object.values(videos).forEach((v) => {
+      Object.values(videos).forEach(function (v) {
         try {
           v.currentTime = 0;
         } catch (e) {
@@ -116,7 +145,9 @@
     }
 
     function setMuted(muted) {
-      Object.values(videos).forEach((v) => (v.muted = muted));
+      Object.values(videos).forEach(function (v) {
+        v.muted = muted;
+      });
     }
 
     return {
@@ -127,7 +158,9 @@
       pause,
       restart,
       setMuted,
-      isPlaying: () => playing,
+      isPlaying: function () {
+        return playing;
+      },
     };
   }
 
