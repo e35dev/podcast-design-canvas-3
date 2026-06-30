@@ -43,17 +43,16 @@
         audioCtx = new AC();
         if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch (e) {} }
         const dest = audioCtx.createMediaStreamDestination();
-        let connected = 0;
         for (const v of vids) {
           try {
-            const src = audioCtx.createMediaElementSource(v);
+            const stream = typeof v.captureStream === "function" ? v.captureStream() : null;
+            const src = stream ? audioCtx.createMediaStreamSource(stream) : audioCtx.createMediaElementSource(v);
             const gain = audioCtx.createGain();
             gain.gain.value = 1 / Math.max(1, vids.length);
             src.connect(gain).connect(dest);
-            connected++;
           } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
         }
-        if (connected) audioTracks = dest.stream.getAudioTracks();
+        audioTracks = dest.stream.getAudioTracks();
       } catch (e) { audioCtx = null; }
     }
 
