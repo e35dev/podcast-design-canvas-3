@@ -28,6 +28,12 @@
         v.setAttribute("playsinline", "");
         v.preload = "auto";
         v.dataset.speaker = bucket;
+        v.addEventListener("loadeddata", function () {
+          if (playing) {
+            const p = v.play();
+            if (p && typeof p.catch === "function") p.catch(function () {});
+          }
+        });
         videos[bucket] = v;
       }
       return v;
@@ -86,8 +92,23 @@
         stageEl.appendChild(frame);
       });
 
-      // Keep playing across re-layout so a preset switch doesn't freeze the preview.
-      if (playing) play();
+      // Re-parenting <video> nodes can blank frames until playback resumes or the
+      // element repaints its current frame — nudge decode after every layout pass.
+      buckets.forEach(function (bucket) {
+        const v = videos[bucket];
+        if (!v) return;
+        if (playing) {
+          const p = v.play();
+          if (p && typeof p.catch === "function") p.catch(function () {});
+        } else if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && v.videoWidth > 0) {
+          try {
+            v.currentTime = v.currentTime;
+          } catch (e) {
+            /* not seekable yet */
+          }
+        }
+      });
+
       return buckets.length;
     }
 

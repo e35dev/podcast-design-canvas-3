@@ -1,10 +1,8 @@
 // scripts/verify-rendered-preview.mjs
-// Drives the shipped app in headless Chrome and proves the active #32 workflow:
-// upload two local video files through the real file input, assign Host/Guest
-// buckets, render decoded uploaded pixels in the composed preview, and preserve
-// those videos across an ordinary preset switch. No fixtures or product-only
-// shortcuts are used; the WebM files are generated in-browser and uploaded as
-// real File objects through the visible input.
+// Drives the shipped app in headless Chrome and proves issue #41's workflow:
+// upload two local video files through the real file inputs, assign Host/Guest
+// buckets, render decoded uploaded pixels in the composed preview, and visibly
+// recompose the stage across Split, Stack, and Spotlight without losing media.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -236,24 +234,63 @@ const browserExpression = `
   assert(beforeSwitch.every((item) => !item.paused), "videos should be playing after Play click");
   assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "videos should start in sync");
 
-  document.querySelector('[data-preset="spotlight"]').click();
-  await sleep(300);
-  const afterSwitch = [...document.querySelectorAll("#stage video")].map((video) => ({
-    speaker: video.dataset.speaker,
-    width: video.videoWidth,
-    height: video.videoHeight,
-    srcIsBlob: video.src.startsWith("blob:"),
-  }));
+  function frameLayout() {
+    const frames = [...document.querySelectorAll("#stage .speaker-frame")];
+    return Object.fromEntries(
+      frames.map((f) => [
+        f.dataset.speaker,
+        {
+          left: parseFloat(f.style.left),
+          top: parseFloat(f.style.top),
+          width: parseFloat(f.style.width),
+          height: parseFloat(f.style.height),
+        },
+      ]),
+    );
+  }
 
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
-  assert(afterSwitch.length === 2, "preset switch should preserve both uploaded videos");
-  assert(afterSwitch.every((item) => item.srcIsBlob && item.width > 0 && item.height > 0), "preset switch should keep decoded upload media");
+  function assertDecodedVideos(label) {
+    const items = [...document.querySelectorAll("#stage video")].map((video) => ({
+      speaker: video.dataset.speaker,
+      width: video.videoWidth,
+      height: video.videoHeight,
+      srcIsBlob: video.src.startsWith("blob:"),
+    }));
+    assert(items.length === 2, label + ": should preserve both uploaded videos");
+    assert(items.every((item) => item.srcIsBlob && item.width > 0 && item.height > 0), label + ": uploaded media should stay decoded");
+    return items;
+  }
+
+  assert(document.querySelector("#stage").dataset.preset === "split", "default preset should be split");
+  const splitLayout = frameLayout();
+  assert(splitLayout.host.left === 0 && splitLayout.guest1.left === 50, "split should place speakers side by side");
+
+  document.querySelector('[data-preset="stack"]').click();
+  await sleep(400);
+  assert(document.querySelector("#stage").dataset.preset === "stack", "preset switch should update the stage to stack");
+  const stackLayout = frameLayout();
+  assert(stackLayout.host.top === 0 && stackLayout.guest1.top === 50, "stack should place speakers in rows");
+  assert(stackLayout.host.left !== splitLayout.host.left || stackLayout.guest1.top !== splitLayout.guest1.top, "stack layout should differ from split");
+  const afterStack = assertDecodedVideos("stack preset");
+
+  document.querySelector('[data-preset="spotlight"]').click();
+  await sleep(400);
+  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage to spotlight");
+  const spotlightLayout = frameLayout();
+  assert(spotlightLayout.host.width === 100 && spotlightLayout.host.height === 100, "spotlight host should fill the stage");
+  assert(spotlightLayout.guest1.width < 50 && spotlightLayout.guest1.height < 50, "spotlight guest should be a PiP inset");
+  const afterSpotlight = assertDecodedVideos("spotlight preset");
+
+  assert(hostStatus.textContent === hostName, "host filename should survive preset cycling");
+  assert(guestStatus.textContent === "guest.webm", "guest filename should survive preset cycling");
 
   return {
     readiness: document.querySelector("#readiness").textContent,
     filledBuckets: [...document.querySelectorAll(".bucket.filled")].map((bucket) => bucket.dataset.bucket),
+    layouts: { split: splitLayout, stack: stackLayout, spotlight: spotlightLayout },
     beforeSwitch,
-    afterSwitch,
+    afterStack,
+    afterSpotlight,
   };
 })()
 `;
@@ -287,7 +324,7 @@ async function main() {
       expression: browserExpression,
       awaitPromise: true,
       returnByValue: true,
-      timeout: 15000,
+      timeout: 20000,
     });
     ws.close();
 

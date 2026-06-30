@@ -1,12 +1,8 @@
 // scripts/verify-social-context.mjs
-// Drives the shipped app in headless Chrome and proves the active #39 workflow:
-// upload Host + Guest 1 videos through the real file inputs, enter DISTINCT
-// social/profile links for each speaker through the visible link inputs, confirm
-// the links are stored per speaker and surface as derived names in the composed
-// preview, and confirm both the links and the uploaded media survive a preset
-// switch. No fixtures or product-only shortcuts: the WebM files are generated
-// in-browser and uploaded as real File objects, and the links are typed into the
-// real inputs. Mirrors scripts/verify-rendered-preview.mjs's CDP harness.
+// Drives the shipped app in headless Chrome and proves issue #41's social +
+// preset workflow: upload Host + Guest 1 videos, enter distinct social links,
+// confirm derived names in the composed preview, and cycle Split → Stack →
+// Spotlight without losing uploads, links, or derived names.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -197,15 +193,28 @@ const browserExpression = `
   assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, "guest1 link input should hold its value");
   assert(/hostperson/.test((document.querySelector('[data-derived="host"]') || {}).textContent || ""), "host derived-name hint should show");
 
-  // Switch preset: links + uploaded media must both survive.
+  function assertSocialContext(label) {
+    assert(tagText("host") === "hostperson" && tagText("guest1") === "guestperson", label + ": derived names must persist");
+    assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, label + ": host link must persist");
+    assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, label + ": guest1 link must persist");
+    const vids = [...document.querySelectorAll("#stage video")];
+    assert(vids.length === 2, label + ": both uploaded videos should remain");
+    assert(vids.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), label + ": uploaded media should stay decoded");
+    return vids;
+  }
+
+  assert(document.querySelector("#stage").dataset.preset === "split", "preview should start in split layout");
+  assertSocialContext("split preset");
+
+  document.querySelector('[data-preset="stack"]').click();
+  await sleep(400);
+  assert(document.querySelector("#stage").dataset.preset === "stack", "preset switch should update the stage to stack");
+  videos = assertSocialContext("stack preset");
+
   document.querySelector('[data-preset="spotlight"]').click();
-  await sleep(300);
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
-  videos = [...document.querySelectorAll("#stage video")];
-  assert(videos.length === 2, "both uploaded videos should survive the preset switch");
-  assert(videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), "uploaded media should still be decoded after switch");
-  assert(tagText("host") === "hostperson" && tagText("guest1") === "guestperson", "social-derived names must persist across preset switch");
-  assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "host link must persist across preset switch");
+  await sleep(400);
+  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage to spotlight");
+  videos = assertSocialContext("spotlight preset");
 
   return {
     tags: { host: tagText("host"), guest1: tagText("guest1") },
