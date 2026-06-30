@@ -89,6 +89,10 @@ h3 {
   font-weight: 750;
 }
 
+.episode-actions {
+  margin-top: -10px;
+}
+
 .field input {
   width: 100%;
   min-height: 44px;

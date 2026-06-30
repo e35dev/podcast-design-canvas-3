@@ -276,6 +276,43 @@ try {
     returnByValue: true
   });
 
+  const resetResult = await send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const button = document.querySelector('[data-action="new-episode"]');
+        if (!button) {
+          return false;
+        }
+        button.click();
+        return true;
+      })()
+    `,
+    returnByValue: true
+  });
+
+  if (!resetResult.result.value) {
+    throw new Error("Could not find Start new episode control.");
+  }
+
+  const postResetReadyPills = await waitForUi("document.querySelectorAll('.ready-pill').length", (value) => value === 0, 10000);
+  const postResetEmptyCards = await waitForUi("document.querySelectorAll('.bucket-preview--empty').length", (value) => value >= 3, 10000);
+  const newEpisodeState = await send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const titleInput = document.querySelector('[data-action=\"title\"]');
+        const fileInputs = Array.from(document.querySelectorAll('[data-action=\"file\"]'));
+        return {
+          title: titleInput?.value || "",
+          readyPills: ${postResetReadyPills},
+          emptyCards: ${postResetEmptyCards},
+          fileInputs: fileInputs.length,
+          fileInputsCleared: fileInputs.every((input) => !(input.files && input.files.length))
+        };
+      })()
+    `,
+    returnByValue: true
+  });
+
   const summary = {
     appUrl,
     mediaInputs: fileInputCount,
@@ -290,7 +327,8 @@ try {
     exportButtonEnabledBeforeExport: postPreview.result.value.exportEnabled,
     acceptanceItems: postPreview.result.value.acceptanceItems,
     downloadName,
-    artifact: artifact.result.value
+    artifact: artifact.result.value,
+    newEpisodeState: newEpisodeState.result.value
   };
 
   console.log(JSON.stringify(summary, null, 2));

@@ -15,6 +15,16 @@ import { exportEpisodeVideo } from "./exporter";
 import type { LoadedTrack, PresetId, SpeakerRole, SpeakerTrack } from "./types";
 
 const speakerRoles: SpeakerRole[] = ["host", "guest1", "guest2"];
+const DEFAULT_EPISODE_TITLE = "New podcast episode";
+
+function makeDefaultTracks(): SpeakerTrack[] {
+  return speakerRoles.map((role) => ({
+    role,
+    label: SPEAKER_LABELS[role],
+    socialLink: "",
+    loadState: "empty"
+  }));
+}
 
 interface AppState {
   episodeTitle: string;
@@ -32,14 +42,9 @@ interface AppState {
 let animationFrame = 0;
 
 const state: AppState = {
-  episodeTitle: "New podcast episode",
+  episodeTitle: DEFAULT_EPISODE_TITLE,
   presetId: "roundtable",
-  tracks: speakerRoles.map((role) => ({
-    role,
-    label: SPEAKER_LABELS[role],
-    socialLink: "",
-    loadState: "empty"
-  })),
+  tracks: makeDefaultTracks(),
   previewing: false,
   exporting: false,
   exportProgress: 0,
@@ -69,6 +74,9 @@ function render(): void {
           <span>Episode title</span>
           <input data-action="title" type="text" value="${escapeAttribute(state.episodeTitle)}" />
         </label>
+        <div class="episode-actions">
+          <button class="secondary" data-action="new-episode" type="button">Start new episode</button>
+        </div>
 
         <div class="section-heading">
           <h2>Speaker buckets</h2>
@@ -290,6 +298,33 @@ function bindEvents(): void {
   app.querySelector<HTMLButtonElement>("[data-action='export']")?.addEventListener("click", () => {
     void startExport();
   });
+
+  app.querySelector<HTMLButtonElement>("[data-action='new-episode']")?.addEventListener("click", () => {
+    resetEpisode();
+  });
+}
+
+function resetEpisode(): void {
+  const allTracks = loadedTracksFromState();
+  allTracks.forEach((track) => {
+    track.video?.pause();
+    if (track.objectUrl) {
+      URL.revokeObjectURL(track.objectUrl);
+    }
+  });
+
+  stopPreviewLoop();
+  state.episodeTitle = DEFAULT_EPISODE_TITLE;
+  state.presetId = "roundtable";
+  state.tracks = makeDefaultTracks();
+  state.previewing = false;
+  state.exporting = false;
+  state.exportProgress = 0;
+  state.exportStatus = "";
+  state.exportUrl = undefined;
+  state.exportFileName = undefined;
+  state.error = undefined;
+  render();
 }
 
 async function setTrackFile(role: SpeakerRole, file: File): Promise<void> {

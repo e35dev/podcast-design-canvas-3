@@ -2,6 +2,7 @@
   const CANVAS_WIDTH = 1280;
   const CANVAS_HEIGHT = 720;
   const speakerRoles = ["host", "guest1", "guest2"];
+  const DEFAULT_EPISODE_TITLE = "New podcast episode";
   const speakerLabels = {
     host: "Host",
     guest1: "Guest 1",
@@ -25,19 +26,25 @@
     }
   ];
 
-  const state = {
-    episodeTitle: "New podcast episode",
-    presetId: "roundtable",
-    tracks: speakerRoles.map((role) => ({
+  function makeDefaultTracks() {
+    return speakerRoles.map((role) => ({
       role,
       label: speakerLabels[role],
       socialLink: "",
       loadState: "empty"
-    })),
+    }));
+  }
+
+  const state = {
+    episodeTitle: DEFAULT_EPISODE_TITLE,
+    presetId: "roundtable",
+    tracks: makeDefaultTracks(),
     previewing: false,
     exporting: false,
     exportProgress: 0,
-    exportStatus: ""
+    exportStatus: "",
+    exportUrl: undefined,
+    exportFileName: undefined
   };
 
   let animationFrame = 0;
@@ -62,6 +69,9 @@
             <span>Episode title</span>
             <input data-action="title" type="text" value="${escapeAttribute(state.episodeTitle)}" />
           </label>
+          <div class="episode-actions">
+            <button class="secondary" data-action="new-episode" type="button">Start new episode</button>
+          </div>
 
           <div class="section-heading">
             <h2>Speaker buckets</h2>
@@ -278,6 +288,32 @@
 
     app.querySelector("[data-action='preview']")?.addEventListener("click", startPreview);
     app.querySelector("[data-action='export']")?.addEventListener("click", startExport);
+    app.querySelector("[data-action='new-episode']")?.addEventListener("click", () => {
+      resetEpisode();
+    });
+  }
+
+  function resetEpisode() {
+    const allTracks = loadedTracksFromState();
+    allTracks.forEach((track) => {
+      track.video?.pause();
+      if (track.objectUrl) {
+        URL.revokeObjectURL(track.objectUrl);
+      }
+    });
+
+    stopPreviewLoop();
+    state.episodeTitle = DEFAULT_EPISODE_TITLE;
+    state.presetId = "roundtable";
+    state.tracks = makeDefaultTracks();
+    state.previewing = false;
+    state.exporting = false;
+    state.exportProgress = 0;
+    state.exportStatus = "";
+    state.exportUrl = undefined;
+    state.exportFileName = undefined;
+    state.error = undefined;
+    render();
   }
 
   async function setTrackFile(role, file) {
