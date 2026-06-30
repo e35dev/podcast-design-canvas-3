@@ -1,11 +1,82 @@
 // app/episode.js
 // Pure, DOM-free episode model: which uploaded file is assigned to which speaker
-// bucket, and which preset is selected. Kept free of browser APIs so it can be
-// unit-tested under plain Node (tests/episode.test.mjs) and reused by the UI.
+// bucket, which preset/template is selected, and how custom speaker-frame
+// positions are stored. Kept free of browser APIs so it can be unit-tested
+// under plain Node (tests/episode.test.mjs) and reused by the UI.
 // Classic script — exposed on window.PDC.episode.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
   const { SPEAKER_BUCKETS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
+
+  const TEMPLATE_NAME_MAX = 64;
+
+  function clamp(v, min, max) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return min;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function sanitizeTemplateName(name) {
+    return String(name || "").trim().slice(0, TEMPLATE_NAME_MAX);
+  }
+
+  function slugFromName(name) {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 24) || "template";
+  }
+
+  function normalizeRect(rect) {
+    const x = clamp(rect && rect.x, 0, 100);
+    const y = clamp(rect && rect.y, 0, 100);
+    const maxW = Math.max(3, 100 - x);
+    const maxH = Math.max(3, 100 - y);
+    return {
+      x,
+      y,
+      w: clamp(rect && rect.w, 3, maxW),
+      h: clamp(rect && rect.h, 3, maxH),
+    };
+  }
+
+  function asBucketRects(layout, buckets) {
+    const out = {};
+    if (!Array.isArray(layout) || !buckets.length) return out;
+
+    const canonicalLayout = layout.map((rect, i) => normalizeRect(rect));
+    buckets.forEach(function (bucket, i) {
+      out[bucket] = canonicalLayout[i] || canonicalLayout[canonicalLayout.length - 1] || { x: 0, y: 0, w: 100, h: 100 };
+    });
+    return out;
+  }
+
+  function getEpisodeTemplates(episode) {
+    if (!Array.isArray(episode.templates)) episode.templates = [];
+    return episode.templates;
+  }
+
+  function templateForId(episode, templateId) {
+    const target = String(templateId || "").trim();
+    return getEpisodeTemplates(episode).find((template) => template.id === target) || null;
+  }
+
+  function makeTemplateId(episode, name) {
+    const existing = getEpisodeTemplates(episode);
+    const base = slugFromName(name) + "-" + String(existing.length + 1);
+    return base;
+  }
+
+  function fallbackTemplateForEpisode(episode, buckets) {
+    const preset = getPreset(episode.presetId) || PDC.presets.PRESETS[0];
+    return {
+      kind: "preset",
+      id: preset.id,
+      name: preset.name,
+      rects: asBucketRects(preset.layout(buckets.length), buckets),
+    };
+  }
 
   function createEpisode(init) {
     return {
@@ -17,6 +88,10 @@
       // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
       presetId: DEFAULT_PRESET_ID,
+      activeLayoutMode: "preset",
+      activeTemplateId: null,
+      draftLayout: null,
+      templates: [],
     };
   }
 
@@ -79,6 +154,115 @@
 
   function setPreset(episode, presetId) {
     if (getPreset(presetId)) episode.presetId = presetId;
+    episode.activeTemplateId = null;
+    episode.activeLayoutMode = "preset";
+    episode.draftLayout = null;
+    return episode;
+  }
+
+  // Save a layout as a reusable template with per-speaker rectangles in
+  // percentage space. The template is selected immediately after save.
+  function saveTemplate(episode, name, rectByBucket) {
+    const safeName = sanitizeTemplateName(name);
+    if (!safeName) return null;
+
+    const buckets = assignedBuckets(episode);
+    if (!buckets.length) return null;
+
+    const fallback = fallbackTemplateForEpisode(episode, buckets);
+    const rects = {};
+    buckets.forEach(function (bucket) {
+      rects[bucket] = normalizeRect((rectByBucket && rectByBucket[bucket]) || fallback.rects[bucket]);
+    });
+
+    const template = {
+      id: makeTemplateId(episode, safeName),
+      name: safeName,
+      rects,
+      createdAt: Date.now(),
+    };
+
+    const bucketList = getEpisodeTemplates(episode);
+    bucketList.push(template);
+    episode.activeTemplateId = template.id;
+    episode.activeLayoutMode = "template";
+    episode.draftLayout = null;
+
+    return template;
+  }
+
+  function getActiveLayout(episode) {
+    const buckets = assignedBuckets(episode);
+    if (!buckets.length) return null;
+
+    if (episode && episode.draftLayout) {
+      return {
+        kind: "draft",
+        id: "draft",
+        name: "Draft",
+        rects: (function () {
+          const rects = {};
+          buckets.forEach(function (bucket) {
+            rects[bucket] = normalizeRect(episode.draftLayout[bucket] || { x: 0, y: 0, w: 100, h: 100 });
+          });
+          return rects;
+        })(),
+      };
+    }
+
+    const activeTemplate = templateForId(episode, episode.activeTemplateId);
+    if (episode.activeLayoutMode === "template" && activeTemplate) {
+      return {
+        kind: "template",
+        id: activeTemplate.id,
+        name: activeTemplate.name,
+        rects: activeTemplate.rects,
+      };
+    }
+
+    return fallbackTemplateForEpisode(episode, buckets);
+  }
+
+  function applyTemplate(episode, templateId) {
+    const template = templateForId(episode, templateId);
+    if (!template) return false;
+    episode.activeTemplateId = template.id;
+    episode.activeLayoutMode = "template";
+    episode.draftLayout = null;
+    return true;
+  }
+
+  function listTemplates(episode) {
+    return getEpisodeTemplates(episode).map((template) => ({
+      id: template.id,
+      name: template.name,
+    }));
+  }
+
+  function getTemplate(episode, templateId) {
+    return templateForId(episode, templateId);
+  }
+
+  function setDraftLayout(episode, rectByBucket) {
+    const buckets = assignedBuckets(episode);
+    if (!buckets.length) {
+      episode.draftLayout = null;
+      return episode;
+    }
+
+    const fallback = fallbackTemplateForEpisode(episode, buckets);
+    const next = {};
+    buckets.forEach(function (bucket) {
+      next[bucket] = normalizeRect((rectByBucket && rectByBucket[bucket]) || fallback.rects[bucket]);
+    });
+    episode.draftLayout = next;
+    episode.activeLayoutMode = "draft";
+    return episode;
+  }
+
+  function clearDraftLayout(episode) {
+    episode.draftLayout = null;
+    episode.activeLayoutMode = episode.activeTemplateId ? "template" : "preset";
     return episode;
   }
 
@@ -88,7 +272,7 @@
   const MIN_SPEAKERS = 2;
 
   function canCompose(episode) {
-    return assignedBuckets(episode).length >= MIN_SPEAKERS && !!getPreset(episode.presetId);
+    return assignedBuckets(episode).length >= MIN_SPEAKERS && !!getActiveLayout(episode);
   }
 
   function readinessReason(episode) {
@@ -97,7 +281,7 @@
       const need = MIN_SPEAKERS - n;
       return `Add ${need} more speaker video${need === 1 ? "" : "s"} to start the preview.`;
     }
-    if (!getPreset(episode.presetId)) return "Choose a preset layout.";
+    if (!getActiveLayout(episode)) return "Choose a preset or apply a template.";
     return "";
   }
 
@@ -114,5 +298,12 @@
     speakerName,
     canCompose,
     readinessReason,
+    getActiveLayout,
+    setDraftLayout,
+    clearDraftLayout,
+    saveTemplate,
+    applyTemplate,
+    listTemplates,
+    getTemplate,
   };
 })();

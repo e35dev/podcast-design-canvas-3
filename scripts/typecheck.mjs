@@ -25,6 +25,13 @@ const required = {
     "canCompose",
     "readinessReason",
     "MIN_SPEAKERS",
+    "getActiveLayout",
+    "setDraftLayout",
+    "clearDraftLayout",
+    "saveTemplate",
+    "applyTemplate",
+    "listTemplates",
+    "getTemplate",
   ],
 };
 
