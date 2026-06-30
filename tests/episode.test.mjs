@@ -108,3 +108,37 @@ test("social links survive a preset switch", () => {
   E.setPreset(ep, "spotlight");
   assert.equal(E.getSocialLink(ep, "host"), "https://x.com/hostperson");
 });
+
+test("applyTemplate switches layout source away from presets", () => {
+  PDC.templates.resetStore();
+  const template = PDC.templates.createTemplate("Custom Show", {
+    host: { x: 0, y: 0, w: 70, h: 100 },
+    guest1: { x: 72, y: 60, w: 26, h: 35 },
+  });
+  const ep = E.createEpisode({});
+  E.assignMedia(ep, "host", media("h.webm"));
+  E.assignMedia(ep, "guest1", media("g.webm"));
+  E.setPreset(ep, "stack");
+  assert.equal(ep.layoutSource, "preset");
+  E.applyTemplate(ep, template.id);
+  assert.equal(ep.layoutSource, "template");
+  assert.equal(ep.templateId, template.id);
+  assert.equal(E.canCompose(ep), true);
+  assert.equal(E.layoutName(ep), "Custom Show");
+});
+
+test("setPreset clears an active saved template", () => {
+  PDC.templates.resetStore();
+  const template = PDC.templates.createTemplate("Saved", {
+    host: { x: 0, y: 0, w: 50, h: 100 },
+    guest1: { x: 50, y: 0, w: 50, h: 100 },
+  });
+  const ep = E.createEpisode({});
+  E.assignMedia(ep, "host", media("h.webm"));
+  E.assignMedia(ep, "guest1", media("g.webm"));
+  E.applyTemplate(ep, template.id);
+  E.setPreset(ep, "split");
+  assert.equal(ep.layoutSource, "preset");
+  assert.equal(ep.templateId, null);
+  assert.equal(E.layoutName(ep), "Split");
+});

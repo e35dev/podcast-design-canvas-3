@@ -65,13 +65,32 @@
         <h2 class="step-title"><span class="num">2</span> Choose a preset layout</h2>
         <div class="presets" id="presets" role="group" aria-label="Preset layouts"></div>
 
+        <h2 class="step-title"><span class="num">3</span> Customize &amp; save layout</h2>
+        <p class="hint">Open the layout editor to drag and resize speaker frames, then save your arrangement as a reusable show template. Saved templates use the same preview and export path as presets.</p>
+        <div class="layout-tools">
+          <button id="open-layout-editor" type="button" disabled>✎ Customize speaker frames</button>
+          <div class="layout-save" id="layout-save" hidden>
+            <label class="layout-save-label">
+              <span>Template name</span>
+              <input type="text" id="template-name" placeholder="My Show Layout" autocomplete="off" aria-label="Template name" />
+            </label>
+            <button id="save-template" type="button" class="primary">Save template</button>
+            <button id="close-layout-editor" type="button">Done editing</button>
+          </div>
+          <p class="layout-status" id="layout-status" role="status"></p>
+          <div class="template-list" id="template-list" role="list" aria-label="Saved layout templates"></div>
+        </div>
+
         <p class="readiness" id="readiness" role="status"></p>
       </section>
 
       <section class="panel preview" aria-label="Composed preview">
-        <h2 class="step-title"><span class="num">3</span> Preview</h2>
-        <div class="stage-wrap">
+        <h2 class="step-title"><span class="num">4</span> Preview</h2>
+        <div class="stage-wrap" id="stage-wrap">
           <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
+          <div id="layout-editor" class="layout-editor" hidden aria-hidden="true">
+            <div class="layout-editor-grid" id="layout-frames" aria-label="Speaker frame editor"></div>
+          </div>
           <div class="stage-empty" id="empty">
             Your composed preview appears here once two speaker videos are uploaded.
           </div>
@@ -84,13 +103,16 @@
         </div>
         <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
         <div class="export-result" id="export-result" hidden></div>
-        <p class="scope-note">Audio cleanup, captions, b-roll, and reusable templates are intentionally out of scope for this step.</p>
+        <p class="scope-note">Captions, b-roll zones, title elements, shapes, overlays, and audio cleanup are out of scope for this step.</p>
       </section>
     </main>
 
     <script src="app/presets.js"></script>
+    <script src="app/templates.js"></script>
+    <script src="app/layout.js"></script>
     <script src="app/episode.js"></script>
     <script src="app/preview.js"></script>
+    <script src="app/layout-editor.js"></script>
     <script src="app/exporter.js"></script>
     <script src="app/ui.js"></script>
   </body>

@@ -1,8 +1,8 @@
 // app/episode.js
 // Pure, DOM-free episode model: which uploaded file is assigned to which speaker
-// bucket, and which preset is selected. Kept free of browser APIs so it can be
-// unit-tested under plain Node (tests/episode.test.mjs) and reused by the UI.
-// Classic script — exposed on window.PDC.episode.
+// bucket, which preset or saved template is active, and social links. Kept free
+// of browser APIs so it can be unit-tested under plain Node (tests/episode.test.mjs)
+// and reused by the UI. Classic script — exposed on window.PDC.episode.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
   const { SPEAKER_BUCKETS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
@@ -10,34 +10,26 @@
   function createEpisode(init) {
     return {
       title: (init && init.title) || "Untitled episode",
-      // bucket -> { name, size, type } media descriptor (no bytes here; the UI
-      // keeps the live <video> element + object URL alongside this model).
       media: {},
-      // bucket -> social/profile URL string entered during setup, kept per
-      // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
       presetId: DEFAULT_PRESET_ID,
+      layoutSource: "preset",
+      templateId: null,
     };
   }
 
-  // Assign an uploaded file descriptor to a bucket. Returns the episode for
-  // chaining. Unknown buckets are ignored so a stray input can't corrupt state.
   function assignMedia(episode, bucket, descriptor) {
     if (!SPEAKER_BUCKETS.includes(bucket)) return episode;
     episode.media[bucket] = descriptor;
     return episode;
   }
 
-  // Removing a speaker drops that bucket's media AND its own social link, but
-  // never touches other speakers' links (so removing one speaker can't lose the
-  // social context attached to the others).
   function clearMedia(episode, bucket) {
     delete episode.media[bucket];
     if (episode.socialLinks) delete episode.socialLinks[bucket];
     return episode;
   }
 
-  // Store (or clear, when blank) the social/profile link for one speaker bucket.
   function setSocialLink(episode, bucket, url) {
     if (!SPEAKER_BUCKETS.includes(bucket)) return episode;
     if (!episode.socialLinks) episode.socialLinks = {};
@@ -51,44 +43,70 @@
     return (episode.socialLinks && episode.socialLinks[bucket]) || "";
   }
 
-  // Pull a readable handle out of a social/profile URL (last path segment, or a
-  // bare @handle, or the domain). Pure string work — no network, no scraping.
   function deriveHandle(raw) {
     let s = String(raw || "").trim();
     if (!s) return "";
     const at = s.match(/^@([A-Za-z0-9_.\-]+)$/);
     if (at) return at[1];
-    s = s.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[?#]/)[0];
+    s = s.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[?#]/)[0].replace(/\/+$/, "");
     const parts = s.split("/").filter(Boolean);
-    const last = parts.length > 1 ? parts[parts.length - 1] : "";
-    const handle = (last || "").replace(/^@/, "");
-    return handle;
+    if (!parts.length) return "";
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const seg = parts[i].replace(/^@/, "");
+      if (!seg) continue;
+      if (/^(in|user|u|profile|channel|c|people)$/i.test(seg)) continue;
+      if (i === 0 && seg.includes(".")) continue;
+      return seg;
+    }
+    return "";
   }
 
-  // The name to display for a speaker: derived from their social link when one
-  // is set, otherwise the default bucket label (Host / Guest 1 / Guest 2).
   function speakerName(episode, bucket) {
     const fallback = (PDC.presets.BUCKET_LABELS && PDC.presets.BUCKET_LABELS[bucket]) || bucket;
     return deriveHandle(getSocialLink(episode, bucket)) || fallback;
   }
 
-  // Buckets that currently hold media, in canonical speaker order.
   function assignedBuckets(episode) {
     return SPEAKER_BUCKETS.filter((b) => episode.media[b]);
   }
 
   function setPreset(episode, presetId) {
-    if (getPreset(presetId)) episode.presetId = presetId;
+    if (getPreset(presetId)) {
+      episode.presetId = presetId;
+      episode.layoutSource = "preset";
+      episode.templateId = null;
+    }
     return episode;
   }
 
-  // The product needs at least two speakers and a valid preset before it can
-  // compose a meaningful preview. This is the single source of truth for the
-  // "ready to preview" state — the UI never invents its own gate.
+  function applyTemplate(episode, templateId) {
+    if (!PDC.templates.getTemplate(templateId)) return episode;
+    episode.templateId = templateId;
+    episode.layoutSource = "template";
+    return episode;
+  }
+
+  function layoutName(episode) {
+    if (episode.layoutSource === "template" && episode.templateId) {
+      const t = PDC.templates.getTemplate(episode.templateId);
+      if (t) return t.name;
+    }
+    const preset = getPreset(episode.presetId);
+    return preset ? preset.name : "";
+  }
+
+  function hasActiveLayout(episode) {
+    const buckets = assignedBuckets(episode);
+    if (episode.layoutSource === "template" && episode.templateId) {
+      return PDC.templates.hasCompleteLayout(episode.templateId, buckets);
+    }
+    return !!getPreset(episode.presetId);
+  }
+
   const MIN_SPEAKERS = 2;
 
   function canCompose(episode) {
-    return assignedBuckets(episode).length >= MIN_SPEAKERS && !!getPreset(episode.presetId);
+    return assignedBuckets(episode).length >= MIN_SPEAKERS && hasActiveLayout(episode);
   }
 
   function readinessReason(episode) {
@@ -97,7 +115,10 @@
       const need = MIN_SPEAKERS - n;
       return `Add ${need} more speaker video${need === 1 ? "" : "s"} to start the preview.`;
     }
-    if (!getPreset(episode.presetId)) return "Choose a preset layout.";
+    if (!hasActiveLayout(episode)) {
+      if (episode.layoutSource === "template") return "Choose a saved layout template.";
+      return "Choose a preset layout.";
+    }
     return "";
   }
 
@@ -108,6 +129,8 @@
     clearMedia,
     assignedBuckets,
     setPreset,
+    applyTemplate,
+    layoutName,
     setSocialLink,
     getSocialLink,
     deriveHandle,

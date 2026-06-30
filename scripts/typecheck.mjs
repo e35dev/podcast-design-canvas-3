@@ -12,12 +12,16 @@ const PDC = loadPDC(root);
 
 const required = {
   presets: ["SPEAKER_BUCKETS", "BUCKET_LABELS", "PRESETS", "DEFAULT_PRESET_ID", "getPreset"],
+  templates: ["createTemplate", "getTemplate", "listTemplates", "rectsForBuckets", "hasCompleteLayout", "clampRect"],
+  layout: ["resolveRects", "draftFromEpisode"],
   episode: [
     "createEpisode",
     "assignMedia",
     "clearMedia",
     "assignedBuckets",
     "setPreset",
+    "applyTemplate",
+    "layoutName",
     "setSocialLink",
     "getSocialLink",
     "deriveHandle",

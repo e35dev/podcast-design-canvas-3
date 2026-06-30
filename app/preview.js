@@ -5,7 +5,6 @@
 // always captured, unlike raw <video> layers in some headless environments.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
-  const { getPreset } = PDC.presets;
 
   function createPreview(canvasEl) {
     const ctx = canvasEl.getContext("2d");
@@ -106,8 +105,7 @@
     function drawFrame() {
       if (!episodeRef) return;
       const buckets = PDC.episode.assignedBuckets(episodeRef);
-      const preset = getPreset(episodeRef.presetId) || PDC.presets.PRESETS[0];
-      const rects = preset.layout(buckets.length);
+      const rects = PDC.layout.resolveRects(episodeRef);
       const w = canvasEl.width;
       const h = canvasEl.height;
 
@@ -160,7 +158,9 @@
         }
       });
 
-      canvasEl.dataset.preset = preset.id;
+      canvasEl.dataset.preset = episodeRef.layoutSource === "preset" ? episodeRef.presetId : "";
+      canvasEl.dataset.layoutSource = episodeRef.layoutSource || "preset";
+      canvasEl.dataset.templateId = episodeRef.templateId || "";
       canvasEl.dataset.speakers = String(buckets.length);
     }
 
@@ -190,6 +190,8 @@
         ctx.fillStyle = "#05070c";
         ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
         canvasEl.dataset.preset = "";
+        canvasEl.dataset.layoutSource = "";
+        canvasEl.dataset.templateId = "";
         canvasEl.dataset.speakers = "0";
       }
       drawFrame();

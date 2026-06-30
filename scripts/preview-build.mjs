@@ -13,8 +13,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const required = [
   "index.html",
   "app/presets.js",
+  "app/templates.js",
+  "app/layout.js",
   "app/episode.js",
   "app/preview.js",
+  "app/layout-editor.js",
   "app/ui.js",
   "app/styles.css",
 ];
@@ -27,7 +30,16 @@ if (missing.length) {
 // 2. index.html must load the classic scripts in dependency order (not ES
 //    modules — they break over file://) and reference the stylesheet.
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
-const mustReference = ["app/presets.js", "app/episode.js", "app/preview.js", "app/ui.js", "app/styles.css"];
+const mustReference = [
+  "app/presets.js",
+  "app/templates.js",
+  "app/layout.js",
+  "app/episode.js",
+  "app/preview.js",
+  "app/layout-editor.js",
+  "app/ui.js",
+  "app/styles.css",
+];
 const notReferenced = mustReference.filter((r) => !html.includes(r));
 if (notReferenced.length) {
   console.error("preview-build: index.html does not reference:\n  " + notReferenced.join("\n  "));
@@ -39,6 +51,10 @@ if (!html.includes("stage-canvas")) {
 }
 if (!html.includes('data-file-bucket="host"')) {
   console.error("preview-build: index.html must declare static speaker upload inputs");
+  process.exit(1);
+}
+if (!html.includes("open-layout-editor")) {
+  console.error("preview-build: index.html must expose the layout editor entry point");
   process.exit(1);
 }
 if (/type=["']module["']/.test(html)) {
@@ -57,6 +73,22 @@ if (PDC.episode.canCompose(ep)) {
 PDC.episode.assignMedia(ep, "guest1", { name: "b.webm", size: 1, type: "video/webm" });
 if (!PDC.episode.canCompose(ep)) {
   console.error("preview-build: canCompose() false with two speakers + default preset — readiness gate is broken");
+  process.exit(1);
+}
+
+PDC.templates.resetStore();
+const tpl = PDC.templates.createTemplate("Smoke", {
+  host: { x: 0, y: 0, w: 55, h: 100 },
+  guest1: { x: 58, y: 58, w: 38, h: 38 },
+});
+PDC.episode.applyTemplate(ep, tpl.id);
+if (!PDC.episode.canCompose(ep) || PDC.episode.layoutName(ep) !== "Smoke") {
+  console.error("preview-build: saved templates should compose through the episode model");
+  process.exit(1);
+}
+const rects = PDC.layout.resolveRects(ep);
+if (!rects[1] || rects[1].x < 50) {
+  console.error("preview-build: active template rects should drive layout resolution");
   process.exit(1);
 }
 

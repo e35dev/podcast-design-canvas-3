@@ -202,6 +202,58 @@ body {
 }
 .stage-canvas.ready ~ .stage-empty, .stage-empty[hidden] { display: none; }
 
+/* Layout editor ----------------------------------------------------------- */
+.layout-tools { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.layout-tools button {
+  padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--ink); font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.layout-tools button:disabled { opacity: 0.45; cursor: not-allowed; }
+.layout-tools .primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: none; color: #fff; }
+.layout-save { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.layout-save-label { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 180px; font-size: 12px; color: var(--muted); }
+.layout-save-label input {
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: #10131d; color: var(--ink); font-size: 14px;
+}
+.layout-status { margin: 0; font-size: 13px; color: var(--muted); min-height: 18px; }
+.template-list { display: flex; flex-direction: column; gap: 8px; }
+.template-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2);
+}
+.template-item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.template-item strong { font-size: 14px; }
+.template-item button {
+  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.stage-wrap.editing-layout .stage-canvas { opacity: 0.35; }
+.layout-editor {
+  position: absolute; inset: 0; border-radius: 12px; pointer-events: none;
+}
+.layout-editor:not([hidden]) { pointer-events: auto; }
+.layout-editor-grid { position: absolute; inset: 0; }
+.layout-frame {
+  position: absolute; box-sizing: border-box;
+  border: 2px solid rgba(108, 140, 255, 0.95);
+  background: rgba(108, 140, 255, 0.12);
+  border-radius: 8px; cursor: grab; touch-action: none;
+}
+.layout-frame-label {
+  position: absolute; left: 8px; bottom: 8px; padding: 2px 8px;
+  border-radius: 6px; background: rgba(8, 10, 16, 0.78); color: #fff;
+  font-size: 12px; font-weight: 600; pointer-events: none;
+}
+.layout-handle {
+  position: absolute; inset: 0; cursor: grab;
+}
+.layout-resize {
+  position: absolute; right: 4px; bottom: 4px; width: 14px; height: 14px;
+  border-radius: 3px; background: #fff; border: 2px solid var(--accent);
+  cursor: nwse-resize;
+}
+
 /* Transport --------------------------------------------------------------- */
 .transport { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .transport button {
