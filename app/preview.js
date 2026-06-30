@@ -1,39 +1,34 @@
 // app/preview.js
-// Renders the composed preview from the REAL uploaded video pixels. Each speaker
-// is a live <video> element backed by an object URL of the uploaded file; the
-// selected preset positions them on a 16:9 stage with CSS percentages. There is
-// no canvas and no placeholder — what you see is the decoded uploaded media.
-//
-// Playback is synchronized: a single Play/Pause/restart drives every speaker
-// video together, and looping keeps the composed preview alive for inspection.
-// Classic script — exposed on window.PDC.preview.
+// Composes the preview on a 16:9 canvas by drawing real uploaded video frames
+// (ctx.drawImage) into preset layout rects. Hidden <video> elements decode the
+// uploaded files; the canvas is what the user sees. The draw loop runs as soon
+// as media exists so composed pixels are visible even before Play is pressed.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
-  const { getPreset } = PDC.presets;
+  const { getPreset, BUCKET_LABELS } = PDC.presets;
 
-  // A Preview owns the live <video> elements for the session so that uploaded
-  // media survives re-layouts, preset switches, and other UI interaction. We
-  // create one <video> per bucket on first upload and reuse it thereafter.
-  function createPreview(stageEl) {
-    const videos = {}; // bucket -> HTMLVideoElement
+  function createPreview(canvasEl) {
+    const ctx = canvasEl.getContext("2d");
+    const videos = {};
     let playing = false;
+    let rafId = 0;
+    let episodeRef = null;
 
     function ensureVideo(bucket) {
       let v = videos[bucket];
       if (!v) {
         v = document.createElement("video");
-        v.muted = true; // muted is required for programmatic autoplay
+        v.muted = true;
         v.loop = true;
         v.playsInline = true;
         v.setAttribute("playsinline", "");
         v.preload = "auto";
-        v.dataset.speaker = bucket;
+        v.crossOrigin = "anonymous";
         videos[bucket] = v;
       }
       return v;
     }
 
-    // Point a bucket's video at a fresh object URL, revoking any previous one.
     function setSource(bucket, file) {
       const v = ensureVideo(bucket);
       if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
@@ -41,6 +36,8 @@
       v.dataset.objectUrl = url;
       v.src = url;
       v.load();
+      const p = v.play();
+      if (p && typeof p.catch === "function") p.catch(function () {});
       return v;
     }
 
@@ -50,69 +47,108 @@
       delete videos[bucket];
     }
 
-    // Lay the assigned speaker videos onto the stage using the preset geometry.
-    // Rebuilding the stage children is cheap and keeps DOM order == speaker order.
-    function render(episode) {
-      const buckets = PDC.episode.assignedBuckets(episode);
-      const preset = getPreset(episode.presetId) || PDC.presets.PRESETS[0];
+    function drawFrame() {
+      if (!episodeRef) return;
+      const buckets = PDC.episode.assignedBuckets(episodeRef);
+      const preset = getPreset(episodeRef.presetId) || PDC.presets.PRESETS[0];
       const rects = preset.layout(buckets.length);
+      const w = canvasEl.width;
+      const h = canvasEl.height;
 
-      stageEl.innerHTML = "";
-      stageEl.dataset.preset = preset.id;
-      stageEl.dataset.speakers = String(buckets.length);
+      ctx.fillStyle = "#05070c";
+      ctx.fillRect(0, 0, w, h);
 
-      buckets.forEach((bucket, i) => {
+      buckets.forEach(function (bucket, i) {
         const rect = rects[i] || rects[rects.length - 1];
-        const frame = document.createElement("div");
-        frame.className = "speaker-frame";
-        frame.dataset.speaker = bucket;
-        frame.style.left = rect.x + "%";
-        frame.style.top = rect.y + "%";
-        frame.style.width = rect.w + "%";
-        frame.style.height = rect.h + "%";
+        const x = (rect.x / 100) * w;
+        const y = (rect.y / 100) * h;
+        const rw = (rect.w / 100) * w;
+        const rh = (rect.h / 100) * h;
+        const v = videos[bucket];
 
-        const v = ensureVideo(bucket);
-        frame.appendChild(v);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(x, y, rw, rh);
 
-        const tag = document.createElement("span");
-        tag.className = "speaker-tag";
-        tag.textContent = PDC.presets.BUCKET_LABELS[bucket];
-        frame.appendChild(tag);
+        if (v && v.readyState >= 2 && v.videoWidth > 0) {
+          const scale = Math.max(rw / v.videoWidth, rh / v.videoHeight);
+          const dw = v.videoWidth * scale;
+          const dh = v.videoHeight * scale;
+          const dx = x + (rw - dw) / 2;
+          const dy = y + (rh - dh) / 2;
+          ctx.drawImage(v, dx, dy, dw, dh);
+        }
 
-        stageEl.appendChild(frame);
+        ctx.fillStyle = "rgba(8,10,16,0.72)";
+        ctx.fillRect(x + 8, y + rh - 28, 90, 22);
+        ctx.fillStyle = "#fff";
+        ctx.font = "600 14px system-ui, sans-serif";
+        ctx.fillText(BUCKET_LABELS[bucket] || bucket, x + 14, y + rh - 12);
       });
 
-      // Keep playing across re-layout so a preset switch doesn't freeze the preview.
-      if (playing) play();
+      canvasEl.dataset.preset = preset.id;
+      canvasEl.dataset.speakers = String(buckets.length);
+    }
+
+    function loop() {
+      drawFrame();
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function ensureLoop() {
+      if (!rafId) rafId = requestAnimationFrame(loop);
+    }
+
+    function stopLoop() {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+    }
+
+    function render(episode) {
+      episodeRef = episode;
+      const buckets = PDC.episode.assignedBuckets(episode);
+      if (buckets.length) ensureLoop();
+      else {
+        stopLoop();
+        ctx.fillStyle = "#05070c";
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+      }
+      drawFrame();
       return buckets.length;
     }
 
     function play() {
       playing = true;
-      Object.values(videos).forEach((v) => {
-        const p = v.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
+      Object.keys(videos).forEach(function (b) {
+        const p = videos[b].play();
+        if (p && typeof p.catch === "function") p.catch(function () {});
       });
+      ensureLoop();
     }
 
     function pause() {
       playing = false;
-      Object.values(videos).forEach((v) => v.pause());
+      Object.keys(videos).forEach(function (b) {
+        videos[b].pause();
+      });
     }
 
     function restart() {
-      Object.values(videos).forEach((v) => {
+      Object.keys(videos).forEach(function (b) {
         try {
-          v.currentTime = 0;
+          videos[b].currentTime = 0;
         } catch (e) {
-          /* not yet seekable; ignore */
+          /* not seekable yet */
         }
       });
       play();
     }
 
     function setMuted(muted) {
-      Object.values(videos).forEach((v) => (v.muted = muted));
+      Object.keys(videos).forEach(function (b) {
+        videos[b].muted = muted;
+      });
     }
 
     return {
@@ -123,7 +159,10 @@
       pause,
       restart,
       setMuted,
-      isPlaying: () => playing,
+      isPlaying: function () {
+        return playing;
+      },
+      drawFrame,
     };
   }
 

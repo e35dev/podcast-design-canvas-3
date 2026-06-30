@@ -4,23 +4,55 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Podcast Design Canvas</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="app/styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="brand">🎙️ Podcast Design Canvas</div>
-      <div class="tagline">Upload synced speaker videos → pick a layout → preview your episode.</div>
+      <div class="tagline">Upload synced speaker videos → pick a layout → play your composed preview.</div>
     </header>
 
     <main class="layout">
       <section class="panel setup" aria-label="Episode setup">
         <h2 class="step-title"><span class="num">1</span> Upload speaker videos</h2>
-        <p class="hint">Assign at least two synced speaker videos — one to Host and one to Guest. Use the per-speaker upload buttons below.</p>
+        <p class="hint">Upload a local video for each speaker. Add at least Host and Guest 1 to compose a preview.</p>
 
-        <div class="buckets" id="buckets" aria-label="Speaker assignments"></div>
-
-        <button type="button" class="bulk-upload" id="bulk-upload">Add multiple videos at once</button>
-        <input id="bulk-files" type="file" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" multiple hidden />
+        <!-- File inputs live in static HTML so automation can attach local videos
+             without opening a native picker. Each bucket keeps the same input
+             for the whole session — inputs are never destroyed by re-renders. -->
+        <div class="buckets" id="buckets" aria-label="Speaker assignments">
+          <div class="bucket" data-bucket="host">
+            <span class="bucket-name">Host</span>
+            <span class="bucket-status" data-status="host">No file</span>
+            <div class="bucket-drop" data-drop="host">
+              <label class="upload-label">
+                Upload Host video
+                <input type="file" data-role="file" data-bucket="host" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" />
+              </label>
+            </div>
+          </div>
+          <div class="bucket" data-bucket="guest1">
+            <span class="bucket-name">Guest 1</span>
+            <span class="bucket-status" data-status="guest1">No file</span>
+            <div class="bucket-drop" data-drop="guest1">
+              <label class="upload-label">
+                Upload Guest 1 video
+                <input type="file" data-role="file" data-bucket="guest1" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" />
+              </label>
+            </div>
+          </div>
+          <div class="bucket" data-bucket="guest2">
+            <span class="bucket-name">Guest 2</span>
+            <span class="bucket-status" data-status="guest2">No file</span>
+            <div class="bucket-drop" data-drop="guest2">
+              <label class="upload-label">
+                Upload Guest 2 video
+                <input type="file" data-role="file" data-bucket="guest2" accept="video/*,.mp4,.webm,.mov,.m4v,.ogg" />
+              </label>
+            </div>
+          </div>
+        </div>
 
         <h2 class="step-title"><span class="num">2</span> Choose a preset layout</h2>
         <div class="presets" id="presets" role="group" aria-label="Preset layouts"></div>
@@ -31,7 +63,7 @@
       <section class="panel preview" aria-label="Composed preview">
         <h2 class="step-title"><span class="num">3</span> Preview</h2>
         <div class="stage-wrap">
-          <div class="stage" id="stage" aria-label="Composed episode preview"></div>
+          <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
           <div class="stage-empty" id="empty">
             Your composed preview appears here once two speaker videos are uploaded.
           </div>
@@ -45,10 +77,6 @@
       </section>
     </main>
 
-    <!-- Classic scripts in dependency order. NOT ES modules: ES module imports
-         and local fetch() are CORS-blocked over file://, so loading them as
-         classic scripts lets the app run whether it is served over http:// or
-         opened directly as a local file. -->
     <script src="app/presets.js"></script>
     <script src="app/episode.js"></script>
     <script src="app/preview.js"></script>

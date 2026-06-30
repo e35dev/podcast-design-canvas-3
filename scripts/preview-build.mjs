@@ -33,6 +33,14 @@ if (notReferenced.length) {
   console.error("preview-build: index.html does not reference:\n  " + notReferenced.join("\n  "));
   process.exit(1);
 }
+if (!html.includes("stage-canvas")) {
+  console.error("preview-build: index.html must include the composed preview canvas");
+  process.exit(1);
+}
+if (!html.includes('data-bucket="host"')) {
+  console.error("preview-build: index.html must declare static speaker upload inputs");
+  process.exit(1);
+}
 if (/type=["']module["']/.test(html)) {
   console.error("preview-build: index.html uses ES modules; classic scripts are required for file:// compatibility");
   process.exit(1);

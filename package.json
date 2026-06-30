@@ -10,6 +10,7 @@
     "test": "node --test tests/*.test.mjs",
     "preview-build": "node scripts/preview-build.mjs",
     "serve": "node scripts/serve.mjs",
-    "e2e-preview": "node scripts/e2e-preview.mjs"
+    "e2e-preview": "node scripts/e2e-preview.mjs",
+    "verify:rendered": "node scripts/rendered-verify.mjs"
   }
 }
