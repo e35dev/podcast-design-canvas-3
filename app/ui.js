@@ -71,7 +71,7 @@
 
   document.querySelectorAll("input[data-link-bucket]").forEach(function (input) {
     const bucket = input.getAttribute("data-link-bucket");
-    input.addEventListener("input", function () {
+    function handle() {
       setSocialLink(episode, bucket, input.value);
       updateBucketRow(bucket);
       if (canCompose(episode)) {
@@ -79,6 +79,9 @@
         preview.play();
       }
       refresh();
+    }
+    ["input", "change"].forEach(function (evt) {
+      input.addEventListener(evt, handle);
     });
   });
 

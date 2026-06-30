@@ -12,7 +12,20 @@ const PDC = loadPDC(root);
 
 const required = {
   presets: ["SPEAKER_BUCKETS", "BUCKET_LABELS", "PRESETS", "DEFAULT_PRESET_ID", "getPreset"],
-  episode: ["createEpisode", "assignMedia", "clearMedia", "assignedBuckets", "setPreset", "canCompose", "readinessReason", "MIN_SPEAKERS"],
+  episode: [
+    "createEpisode",
+    "assignMedia",
+    "clearMedia",
+    "assignedBuckets",
+    "setPreset",
+    "setSocialLink",
+    "getSocialLink",
+    "deriveHandle",
+    "speakerName",
+    "canCompose",
+    "readinessReason",
+    "MIN_SPEAKERS",
+  ],
 };
 
 const missing = [];

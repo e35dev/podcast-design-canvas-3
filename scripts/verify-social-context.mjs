@@ -160,7 +160,10 @@ const browserExpression = `
   const ensureNames = () => {
     assert(tagText("host") === "hostperson", "host label should show derived name, got: " + tagText("host"));
     assert(tagText("guest1") === "guestperson", "guest1 label should show derived name, got: " + tagText("guest1"));
+    assert(tagText("guest2") === "guest2person", "guest2 label should show derived name, got: " + tagText("guest2"));
     assert(tagText("host") !== tagText("guest1"), "derived names must be distinct per speaker");
+    assert(tagText("host") !== tagText("guest2"), "derived names must be distinct per speaker");
+    assert(tagText("guest1") !== tagText("guest2"), "derived names must be distinct per speaker");
   };
   function canvasLitPct() {
     const c = document.getElementById("stage-canvas");
@@ -175,8 +178,9 @@ const browserExpression = `
     ensureNames();
     assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, label + ": host link must persist");
     assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, label + ": guest1 link must persist");
+    assert(document.querySelector('[data-link-bucket="guest2"]').value === GUEST2_URL, label + ": guest2 link must persist");
     videos = [...document.querySelectorAll("video[data-speaker]")];
-    assert(videos.length === 2, label + ": both uploaded videos should remain");
+    assert(videos.length === 3, label + ": all uploaded videos should remain");
     assert(videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), label + ": uploaded media should stay decoded");
     const lit = canvasLitPct();
     assert(lit >= 5, label + ": composed canvas should show nonblank pixels (" + lit + "%)");
@@ -193,27 +197,35 @@ const browserExpression = `
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
   assert(document.querySelector('[data-link-bucket="host"]'), "Host social link input should exist");
   assert(document.querySelector('[data-link-bucket="guest1"]'), "Guest 1 social link input should exist");
+  assert(document.querySelector('[data-link-bucket="guest2"]'), "Guest 2 social link input should exist");
 
-  // Upload two real speaker videos.
+  // Upload three real speaker videos.
   uploadTo(document.querySelector('[data-file-bucket="host"]'), await makeVideo("host.webm", "#b91c1c"));
   await sleep(100);
   uploadTo(document.querySelector('[data-file-bucket="guest1"]'), await makeVideo("guest.webm", "#047857"));
+  await sleep(100);
+  uploadTo(document.querySelector('[data-file-bucket="guest2"]'), await makeVideo("guest2.webm", "#2563eb"));
   await sleep(1200);
   let videos = [...document.querySelectorAll("video[data-speaker]")];
-  assert(videos.length === 2, "two uploaded speaker videos should compose the preview");
+  assert(videos.length === 3, "three uploaded speaker videos should compose the preview");
 
   // Enter DISTINCT social links for each speaker through the real inputs.
   const HOST_URL = "https://x.com/hostperson";
   const GUEST_URL = "https://x.com/guestperson";
+  const GUEST2_URL = "https://x.com/guest2person";
   typeInto(document.querySelector('[data-link-bucket="host"]'), HOST_URL);
   typeInto(document.querySelector('[data-link-bucket="guest1"]'), GUEST_URL);
+  typeInto(document.querySelector('[data-link-bucket="guest2"]'), GUEST2_URL);
   await sleep(300);
 
   // Links stored per speaker and surfaced as distinct derived names in preview.
   ensureNames();
   assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "host link input should hold its value");
   assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, "guest1 link input should hold its value");
+  assert(document.querySelector('[data-link-bucket="guest2"]').value === GUEST2_URL, "guest2 link input should hold its value");
   assert(/hostperson/.test((document.querySelector('[data-derived="host"]') || {}).textContent || ""), "host derived-name hint should show");
+  assert(/guestperson/.test((document.querySelector('[data-derived="guest1"]') || {}).textContent || ""), "guest1 derived-name hint should show");
+  assert(/guest2person/.test((document.querySelector('[data-derived="guest2"]') || {}).textContent || ""), "guest2 derived-name hint should show");
 
   const playButton = document.querySelector("#play");
   if (!playButton.textContent.includes("Pause")) playButton.click();
@@ -227,11 +239,30 @@ const browserExpression = `
     assertSocialState(presetId + " preset with social links");
   }
 
+  // Replacing one link updates only that speaker's derived name.
+  typeInto(document.querySelector('[data-link-bucket="host"]'), "https://x.com/newhostperson");
+  await sleep(250);
+  assert(tagText("host") === "newhostperson", "host derived label should update when host link is replaced");
+  assert(tagText("guest1") === "guestperson", "guest1 derived label should remain unchanged");
+  assert(tagText("guest2") === "guest2person", "guest2 derived label should remain unchanged");
+
+  // Clearing one link falls back to bucket label and keeps other names intact.
+  typeInto(document.querySelector('[data-link-bucket="guest2"]'), "");
+  await sleep(250);
+  assert(tagText("guest2") === "Guest 2", "guest2 should fall back after clearing its link");
+  assert(tagText("host") === "newhostperson", "host derived label should remain after clearing another speaker");
+  assert(tagText("guest1") === "guestperson", "guest1 derived label should remain after clearing another speaker");
+
   return {
-    tags: { host: tagText("host"), guest1: tagText("guest1") },
+    tags: {
+      host: tagText("host"),
+      guest1: tagText("guest1"),
+      guest2: tagText("guest2"),
+    },
     links: {
       host: document.querySelector('[data-link-bucket="host"]').value,
       guest1: document.querySelector('[data-link-bucket="guest1"]').value,
+      guest2: document.querySelector('[data-link-bucket="guest2"]').value,
     },
     presetAfter: document.querySelector("#stage-canvas").dataset.preset,
     videoCount: videos.length,
