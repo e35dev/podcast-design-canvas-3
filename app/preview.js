@@ -16,6 +16,7 @@
   // create one <video> per bucket on first upload and reuse it thereafter.
   function createPreview(stageEl) {
     const videos = {}; // bucket -> HTMLVideoElement
+    const frames = {}; // bucket -> speaker frame element
     let playing = false;
 
     function ensureVideo(bucket) {
@@ -41,12 +42,31 @@
       v.dataset.objectUrl = url;
       v.src = url;
       v.load();
+      v.addEventListener(
+        "loadeddata",
+        () => {
+          try {
+            v.currentTime = 0;
+            if (playing) {
+              const p = v.play();
+              if (p && typeof p.catch === "function") p.catch(() => {});
+            }
+          } catch (error) {
+            /* play may be blocked until decode is stable; ignore */
+          }
+        },
+        { once: true },
+      );
       return v;
     }
 
     function clear(bucket) {
       const v = videos[bucket];
       if (v && v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
+      if (frames[bucket]) {
+        frames[bucket].remove();
+        delete frames[bucket];
+      }
       delete videos[bucket];
     }
 
@@ -70,40 +90,63 @@
     }
 
     // Lay the assigned speaker videos onto the stage using the preset geometry.
-    // Rebuilding the stage children is cheap and keeps DOM order == speaker order.
+    // Keep existing frame and video nodes so decoded buffers stay warm and
+    // prevent brief black screens during preset switching.
     function render(episode) {
       const restoreTime = currentPlayhead();
       const buckets = PDC.episode.assignedBuckets(episode);
       const preset = getPreset(episode.presetId) || PDC.presets.PRESETS[0];
       const rects = preset.layout(buckets.length);
-
-      stageEl.innerHTML = "";
       stageEl.dataset.preset = preset.id;
       stageEl.dataset.speakers = String(buckets.length);
+      const activeBuckets = new Set(buckets);
+
+      // Remove stale frames when speakers are no longer assigned.
+      Object.keys(frames).forEach((bucket) => {
+        if (!activeBuckets.has(bucket)) {
+          frames[bucket].remove();
+          delete frames[bucket];
+        }
+      });
 
       buckets.forEach((bucket, i) => {
         const rect = rects[i] || rects[rects.length - 1];
-        const frame = document.createElement("div");
-        frame.className = "speaker-frame";
+        let frame = frames[bucket];
+        if (!frame) {
+          frame = document.createElement("div");
+          frame.className = "speaker-frame";
+
+          const v = ensureVideo(bucket);
+          frame.appendChild(v);
+
+          const tag = document.createElement("span");
+          tag.className = "speaker-tag";
+          tag.dataset.speakerTag = bucket;
+          frame.appendChild(tag);
+
+          frames[bucket] = frame;
+        }
+
         frame.dataset.speaker = bucket;
         frame.style.left = rect.x + "%";
         frame.style.top = rect.y + "%";
         frame.style.width = rect.w + "%";
         frame.style.height = rect.h + "%";
-
-        const v = ensureVideo(bucket);
-        frame.appendChild(v);
-
-        const tag = document.createElement("span");
-        tag.className = "speaker-tag";
-        tag.dataset.speakerTag = bucket;
+        let tag = frame.querySelector(".speaker-tag");
+        if (!tag) {
+          tag = document.createElement("span");
+          tag.className = "speaker-tag";
+          tag.dataset.speakerTag = bucket;
+          frame.appendChild(tag);
+        }
         // Show the name derived from the speaker's social link when one is set,
         // otherwise the default bucket label — so the preview visibly reflects
         // the per-speaker social context entered during setup.
         tag.textContent = PDC.episode.speakerName(episode, bucket);
-        frame.appendChild(tag);
 
-        stageEl.appendChild(frame);
+        if (!stageEl.contains(frame)) {
+          stageEl.appendChild(frame);
+        }
       });
 
       seekAll(restoreTime);
