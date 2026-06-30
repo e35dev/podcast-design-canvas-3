@@ -161,6 +161,11 @@ const browserExpression = `
     const el = document.querySelector('[data-speaker-tag="' + bucket + '"]');
     return el ? el.textContent : null;
   };
+  const ensureNames = () => {
+    assert(tagText("host") === "hostperson", "host preview tag should show derived name, got: " + tagText("host"));
+    assert(tagText("guest1") === "guestperson", "guest1 preview tag should show derived name, got: " + tagText("guest1"));
+    assert(tagText("host") !== tagText("guest1"), "derived names must be distinct per speaker");
+  };
 
   // Wait for the app's classic scripts to finish wiring the DOM (the page may
   // still be loading when this evaluates), then assert the controls exist.
@@ -190,21 +195,33 @@ const browserExpression = `
   await sleep(300);
 
   // Links stored per speaker and surfaced as distinct derived names in preview.
-  assert(tagText("host") === "hostperson", "host preview tag should show derived name, got: " + tagText("host"));
-  assert(tagText("guest1") === "guestperson", "guest1 preview tag should show derived name, got: " + tagText("guest1"));
-  assert(tagText("host") !== tagText("guest1"), "derived names must be distinct per speaker");
+  ensureNames();
   assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "host link input should hold its value");
   assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, "guest1 link input should hold its value");
   assert(/hostperson/.test((document.querySelector('[data-derived="host"]') || {}).textContent || ""), "host derived-name hint should show");
 
-  // Switch preset: links + uploaded media must both survive.
+  // Switch preset: links + uploaded media + derived names must both survive.
+  ["split", "stack", "spotlight"].forEach((presetId) => {
+    document.querySelector('[data-preset="' + presetId + '"]').click();
+  });
+  await sleep(800);
+  videos = [...document.querySelectorAll("#stage video")];
+  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset should end on spotlight");
+  assert(videos.length === 2, "both uploaded videos should survive the preset switch");
+  assert(videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), "uploaded media should still be decoded after switch");
+  assert(videos.every((v) => v.videoWidth === 320), "uploaded media dimensions should remain stable");
+  assert(document.querySelector("#stage").dataset.speakers === "2", "composed stage should still track both speakers");
+  ensureNames();
+
+  // Final focused check that spotlight is visible with derived names.
   document.querySelector('[data-preset="spotlight"]').click();
   await sleep(300);
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
+  await sleep(120);
+  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset should stay on spotlight");
+  ensureNames();
   videos = [...document.querySelectorAll("#stage video")];
   assert(videos.length === 2, "both uploaded videos should survive the preset switch");
   assert(videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), "uploaded media should still be decoded after switch");
-  assert(tagText("host") === "hostperson" && tagText("guest1") === "guestperson", "social-derived names must persist across preset switch");
   assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "host link must persist across preset switch");
 
   return {
