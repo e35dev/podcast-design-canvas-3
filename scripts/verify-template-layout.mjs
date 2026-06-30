@@ -94,7 +94,7 @@ const browserExpression = `
     target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, pointerType: "mouse", buttons: 1, clientX: from.x, clientY: from.y }));
     window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, pointerType: "mouse", buttons: 1, clientX: to.x, clientY: to.y }));
     window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, pointerType: "mouse", buttons: 0, clientX: to.x, clientY: to.y }));
-    await sleep(150);
+    await sleep(200);
   };
   const waitFor = async (fn, label, tries = 200) => { for (let i = 0; i < tries; i++) { if (fn()) return; await sleep(50); } throw new Error(label); };
   await waitFor(() => document.querySelector('#open-editor'), "app");
