@@ -1,0 +1,7 @@
+{
+  "comment": "Build-correctness gate: zero-dependency unit tests over the DOM-free episode/preset model, plus a preview-build smoke check that the shippable app assembles and the model's compose-readiness invariant holds. This gate does NOT and cannot prove the visual outcome: the real product behavior (two real uploaded videos decoded and composited in the running preview) is verified by running the app and inspecting the rendered UI. No seeded media, fixtures, or verifier-only code paths are used by the product.",
+  "checks": [
+    { "name": "test", "run": "node scripts/run-tests.mjs" },
+    { "name": "preview-build", "run": "node scripts/preview-build.mjs" }
+  ]
+}
