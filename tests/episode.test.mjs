@@ -108,3 +108,11 @@ test("social links survive a preset switch", () => {
   E.setPreset(ep, "spotlight");
   assert.equal(E.getSocialLink(ep, "host"), "https://x.com/hostperson");
 });
+
+test("audio leveling normalizes to supported creator-facing choices", () => {
+  const ep = E.createEpisode({});
+  E.setAudioLeveling(ep, "speaker-leveling");
+  assert.equal(ep.audioLeveling, "speaker-leveling");
+  E.setAudioLeveling(ep, "bad-value");
+  assert.equal(ep.audioLeveling, "off");
+});

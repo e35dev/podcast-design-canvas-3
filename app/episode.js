@@ -17,6 +17,7 @@
       // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
       presetId: DEFAULT_PRESET_ID,
+      audioLeveling: "off",
     };
   }
 
@@ -108,6 +109,11 @@
     return "";
   }
 
+  function setAudioLeveling(episode, value) {
+    episode.audioLeveling = value === "speaker-leveling" ? "speaker-leveling" : "off";
+    return episode;
+  }
+
   PDC.episode = {
     MIN_SPEAKERS,
     createEpisode,
@@ -121,5 +127,6 @@
     speakerName,
     canCompose,
     readinessReason,
+    setAudioLeveling,
   };
 })();

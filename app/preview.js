@@ -18,6 +18,10 @@
     let rafId = 0;
     let episodeRef = null;
     let referenceTime = 0;
+    let audioCtx = null;
+    let audioNodes = {};
+    let masterGain = null;
+    let audioDest = null;
 
     function syncReferenceTime() {
       const times = Object.values(videos)
@@ -64,6 +68,61 @@
         videos[bucket] = v;
       }
       return v;
+    }
+
+    function assignedLevelMap() {
+      const out = {};
+      const media = (episodeRef && episodeRef.media) || {};
+      Object.keys(media).forEach(function (bucket) {
+        const loudness = media[bucket] && Number(media[bucket].loudness);
+        if (Number.isFinite(loudness) && loudness > 0) {
+          out[bucket] = Math.max(0.2, Math.min(3, 0.12 / loudness));
+        }
+      });
+      return out;
+    }
+
+    function audioProfile() {
+      return {
+        leveling: episodeRef && episodeRef.audioLeveling === "speaker-leveling" ? "speaker-leveling" : "off",
+      };
+    }
+
+    async function ensureAudioGraph() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC || !episodeRef) return null;
+      if (!audioCtx) audioCtx = new AC();
+      if (audioCtx.state === "suspended") {
+        try { await audioCtx.resume(); } catch (e) {}
+      }
+      const vids = Object.keys(videos).filter((bucket) => videos[bucket] && videos[bucket].src);
+      if (!vids.length) return null;
+      if (!audioDest) {
+        audioDest = audioCtx.createMediaStreamDestination();
+        masterGain = audioCtx.createGain();
+        masterGain.connect(audioDest);
+        masterGain.connect(audioCtx.destination);
+      }
+      const profile = audioProfile();
+      const levels = assignedLevelMap();
+      Object.keys(videos).forEach(function (bucket) {
+        const video = videos[bucket];
+        if (!video || !video.src) return;
+        let node = audioNodes[bucket];
+        if (!node) {
+          node = audioNodes[bucket] = {};
+          try {
+            node.src = audioCtx.createMediaElementSource(video);
+          } catch (e) {
+            return;
+          }
+          node.gain = audioCtx.createGain();
+          node.src.connect(node.gain);
+          node.gain.connect(masterGain);
+        }
+        node.gain.gain.value = profile.leveling === "speaker-leveling" ? (levels[bucket] || 1) : 1;
+      });
+      return audioDest.stream.getAudioTracks();
     }
 
     function setSource(bucket, file) {
@@ -200,6 +259,7 @@
     function play() {
       playing = true;
       const targetTime = alignPlayback(0);
+      ensureAudioGraph();
       Object.keys(videos).forEach(function (b) {
         const p = videos[b].play();
         if (p && typeof p.catch === "function") p.catch(function () {});
@@ -236,6 +296,10 @@
       });
     }
 
+    async function syncAudio() {
+      return ensureAudioGraph();
+    }
+
     return {
       setSource,
       clear,
@@ -244,6 +308,16 @@
       pause,
       restart,
       setMuted,
+      syncAudio,
+      audioTracks: function () {
+        return audioDest ? audioDest.stream.getAudioTracks() : [];
+      },
+      audioGainState: function () {
+        const out = {};
+        const levels = assignedLevelMap();
+        Object.keys(levels).forEach(function (bucket) { out[bucket] = levels[bucket]; });
+        return out;
+      },
       isPlaying: function () {
         return playing;
       },

@@ -2,7 +2,7 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason } = PDC.episode;
+  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason, setAudioLeveling } = PDC.episode;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -10,6 +10,8 @@
 
   const episode = createEpisode({ title: "Episode 1" });
   const preview = PDC.preview.createPreview($("stage-canvas"));
+  PDC.previewController = preview;
+  PDC.currentEpisode = episode;
 
   const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv|avi|mkv)$/i;
 
@@ -17,6 +19,24 @@
     if (!file) return false;
     if (file.type && /^video\//i.test(file.type)) return true;
     return VIDEO_EXT.test(file.name || "");
+  }
+
+  async function measureLoudness(file) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC || !file || typeof file.arrayBuffer !== "function") return null;
+    const ctx = new AC();
+    try {
+      const buffer = await file.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(buffer.slice(0));
+      const data = audioBuffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      return Math.sqrt(sum / Math.max(1, data.length));
+    } catch (e) {
+      return null;
+    } finally {
+      try { await ctx.close(); } catch (e) {}
+    }
   }
 
   function updateDerived(bucket) {
@@ -46,9 +66,16 @@
 
   function ingestFile(bucket, file) {
     if (!isVideoFile(file)) return false;
-    assignMedia(episode, bucket, { name: file.name, size: file.size, type: file.type || "video/*" });
+    const descriptor = { name: file.name, size: file.size, type: file.type || "video/*" };
+    assignMedia(episode, bucket, descriptor);
     preview.setSource(bucket, file);
     updateBucketRow(bucket);
+    measureLoudness(file).then((loudness) => {
+      if (Number.isFinite(loudness)) {
+        episode.media[bucket].loudness = loudness;
+        preview.syncAudio();
+      }
+    });
     return true;
   }
 
@@ -156,6 +183,11 @@
     });
   }
 
+  function renderAudioControl() {
+    const el = $("audio-leveling");
+    if (el) el.value = episode.audioLeveling || "off";
+  }
+
   function openEditor() {
     if (!canCompose(episode)) return;
     const buckets = assignedBuckets(episode);
@@ -193,6 +225,16 @@
     renderTemplates();
     applyLayout(t.id);
   });
+
+  const audioLeveling = $("audio-leveling");
+  if (audioLeveling) {
+    audioLeveling.addEventListener("change", async function () {
+      setAudioLeveling(episode, audioLeveling.value);
+      await preview.syncAudio();
+      if (preview.isPlaying()) preview.play();
+      refresh();
+    });
+  }
 
   $("play").addEventListener("click", function () {
     if (preview.isPlaying()) preview.pause();
@@ -269,5 +311,6 @@
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   renderTemplates();
+  renderAudioControl();
   refresh();
 })();
