@@ -17,6 +17,36 @@
     let playing = false;
     let rafId = 0;
     let episodeRef = null;
+    let referenceTime = 0;
+
+    function syncReferenceTime() {
+      const times = Object.values(videos)
+        .map((video) => video.currentTime)
+        .filter((time) => Number.isFinite(time))
+        .filter((time) => time > 0);
+      if (!times.length) return referenceTime;
+      const next = Math.min(...times);
+      referenceTime = next;
+      return next;
+    }
+
+    function seekAll(time) {
+      if (!Number.isFinite(time)) return;
+      Object.values(videos).forEach((video) => {
+        try {
+          video.currentTime = time;
+        } catch (error) {
+          /* not seekable yet */
+        }
+      });
+    }
+
+    function alignPlayback(time) {
+      referenceTime = syncReferenceTime();
+      const target = Number.isFinite(time) ? Math.min(referenceTime, time) : referenceTime;
+      seekAll(target);
+      return target;
+    }
 
     function ensureVideo(bucket) {
       let v = videos[bucket];
@@ -48,10 +78,11 @@
         function seekFirstFrame() {
           v.removeEventListener("loadeddata", seekFirstFrame);
           try {
-            if (v.currentTime === 0) v.currentTime = 0.001;
+            if (v.currentTime === 0) v.currentTime = Math.max(0, referenceTime);
           } catch (e) {
             /* not seekable yet */
           }
+          alignPlayback(referenceTime);
           drawFrame();
           if (playing) {
             const p = v.play();
@@ -118,6 +149,7 @@
     }
 
     function loop() {
+      syncReferenceTime();
       drawFrame();
       rafId = requestAnimationFrame(loop);
     }
@@ -150,21 +182,27 @@
 
     function play() {
       playing = true;
+      const targetTime = alignPlayback(0);
       Object.keys(videos).forEach(function (b) {
         const p = videos[b].play();
         if (p && typeof p.catch === "function") p.catch(function () {});
       });
       ensureLoop();
+      if (Number.isFinite(targetTime)) {
+        seekAll(targetTime);
+      }
     }
 
     function pause() {
       playing = false;
+      syncReferenceTime();
       Object.keys(videos).forEach(function (b) {
         videos[b].pause();
       });
     }
 
     function restart() {
+      referenceTime = 0;
       Object.keys(videos).forEach(function (b) {
         try {
           videos[b].currentTime = 0;
