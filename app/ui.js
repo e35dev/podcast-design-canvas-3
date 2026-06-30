@@ -12,6 +12,7 @@
   const preview = PDC.preview.createPreview($("stage-canvas"));
   PDC.previewController = preview;
   PDC.currentEpisode = episode;
+  let lastExportUrl = "";
 
   const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv|avi|mkv)$/i;
 
@@ -260,10 +261,15 @@
     $("export-progress").hidden = false;
     $("export-result").hidden = true;
     try {
+      if (lastExportUrl) {
+        try { URL.revokeObjectURL(lastExportUrl); } catch (e) {}
+        lastExportUrl = "";
+      }
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
         onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
+      lastExportUrl = out.url;
       const layout = currentLayout();
       const fname = (episode.title || "episode").replace(/[^\w.-]+/g, "_") + "-" + layout.id + ".webm";
       PDC.exporter.download(out.url, fname);
