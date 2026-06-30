@@ -4,6 +4,7 @@
     { "name": "test", "run": "node scripts/run-tests.mjs" },
     { "name": "preview-build", "run": "node scripts/preview-build.mjs" },
     { "name": "rendered-preview", "run": "node scripts/verify-rendered-preview.mjs" },
+    { "name": "template-layout", "run": "node scripts/verify-template-layout.mjs" },
     { "name": "rendered-social", "run": "node scripts/verify-social-context.mjs" },
     { "name": "rendered-export", "run": "node scripts/verify-export.mjs" }
   ]

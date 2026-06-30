@@ -65,11 +65,29 @@
         <h2 class="step-title"><span class="num">2</span> Choose a preset layout</h2>
         <div class="presets" id="presets" role="group" aria-label="Preset layouts"></div>
 
+        <h2 class="step-title"><span class="num">3</span> Customize layout</h2>
+        <p class="hint">Open the canvas editor to drag or resize speaker frames, then save the arrangement as a reusable show template.</p>
+        <button id="open-editor" type="button" class="secondary" disabled>Open layout editor</button>
+        <div class="layout-editor-shell" id="layout-editor-shell">
+          <div id="layout-editor" class="layout-editor" aria-label="Speaker layout editor" hidden></div>
+        </div>
+        <div class="template-actions" id="template-actions" hidden>
+          <label>
+            <span>Template name</span>
+            <input id="template-name" type="text" placeholder="Interview A" autocomplete="off" aria-label="Template name" />
+          </label>
+          <button id="save-template" type="button" class="secondary" disabled>Save layout template</button>
+        </div>
+        <div class="template-list-wrap">
+          <h3 class="sub-title">Saved templates</h3>
+          <div id="template-list" class="template-list" aria-label="Saved templates"></div>
+        </div>
+
         <p class="readiness" id="readiness" role="status"></p>
       </section>
 
       <section class="panel preview" aria-label="Composed preview">
-        <h2 class="step-title"><span class="num">3</span> Preview</h2>
+        <h2 class="step-title"><span class="num">4</span> Preview</h2>
         <div class="stage-wrap">
           <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
           <div class="stage-empty" id="empty">
@@ -84,7 +102,7 @@
         </div>
         <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
         <div class="export-result" id="export-result" hidden></div>
-        <p class="scope-note">Audio cleanup, captions, b-roll, and reusable templates are intentionally out of scope for this step.</p>
+        <p class="scope-note">Audio cleanup, captions, and b-roll are intentionally out of scope for this step.</p>
       </section>
     </main>
 

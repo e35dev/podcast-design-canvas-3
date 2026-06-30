@@ -5,7 +5,6 @@
 // always captured, unlike raw <video> layers in some headless environments.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
-  const { getPreset } = PDC.presets;
 
   function createPreview(canvasEl) {
     const ctx = canvasEl.getContext("2d");
@@ -106,8 +105,8 @@
     function drawFrame() {
       if (!episodeRef) return;
       const buckets = PDC.episode.assignedBuckets(episodeRef);
-      const preset = getPreset(episodeRef.presetId) || PDC.presets.PRESETS[0];
-      const rects = preset.layout(buckets.length);
+      const layout = PDC.episode.getActiveLayout(episodeRef) || { kind: "preset", id: "", name: "", rects: {} };
+      const rects = layout.rects || {};
       const w = canvasEl.width;
       const h = canvasEl.height;
 
@@ -115,7 +114,7 @@
       ctx.fillRect(0, 0, w, h);
 
       buckets.forEach(function (bucket, i) {
-        const rect = rects[i] || rects[rects.length - 1];
+        const rect = rects[bucket] || { x: 0, y: 0, w: 100, h: 100 };
         const x = (rect.x / 100) * w;
         const y = (rect.y / 100) * h;
         const rw = (rect.w / 100) * w;
@@ -160,7 +159,9 @@
         }
       });
 
-      canvasEl.dataset.preset = preset.id;
+      canvasEl.dataset.preset = layout.id || "";
+      canvasEl.dataset.layoutMode = layout.kind || "";
+      canvasEl.dataset.layoutSource = layout.name || "";
       canvasEl.dataset.speakers = String(buckets.length);
     }
 

@@ -108,3 +108,26 @@ test("social links survive a preset switch", () => {
   E.setPreset(ep, "spotlight");
   assert.equal(E.getSocialLink(ep, "host"), "https://x.com/hostperson");
 });
+
+test("custom layouts can be saved, reapplied, and survive preset round-trips", () => {
+  const ep = E.createEpisode({});
+  E.assignMedia(ep, "host", media("host.webm"));
+  E.assignMedia(ep, "guest1", media("guest.webm"));
+  const draft = {
+    host: { x: 8, y: 12, w: 58, h: 70 },
+    guest1: { x: 62, y: 18, w: 30, h: 58 },
+  };
+  E.setDraftLayout(ep, draft);
+  const template = E.saveTemplate(ep, "Interview A", draft);
+  assert.ok(template);
+  assert.equal(ep.activeTemplateId, template.id);
+  assert.equal(ep.activeLayoutMode, "template");
+  E.setPreset(ep, "stack");
+  assert.equal(ep.activeTemplateId, null);
+  assert.equal(E.getActiveLayout(ep).kind, "preset");
+  assert.equal(E.applyTemplate(ep, template.id), true);
+  const active = E.getActiveLayout(ep);
+  assert.equal(active.kind, "template");
+  assert.deepEqual(active.rects.host, draft.host);
+  assert.deepEqual(active.rects.guest1, draft.guest1);
+});
