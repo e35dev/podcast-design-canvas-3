@@ -80,14 +80,14 @@
       document.addEventListener("mousemove", onDragMove);
       document.addEventListener("mouseup", onDragEnd);
       document.addEventListener("pointermove", onDragMove);
-      document.addEventListener("pointerup", onPointerCancel);
+      document.addEventListener("pointerup", onPointerUp);
     }
 
     function unbindDragListeners() {
       document.removeEventListener("mousemove", onDragMove);
       document.removeEventListener("mouseup", onDragEnd);
       document.removeEventListener("pointermove", onDragMove);
-      document.removeEventListener("pointerup", onPointerCancel);
+      document.removeEventListener("pointerup", onPointerUp);
     }
 
     function onDragStart(event) {
