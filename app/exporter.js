@@ -1,7 +1,6 @@
-// app/exporter.js — export the composed canvas preview as a real, playable
-// video file. The preview already paints the selected preset composition (real
-// uploaded frames + speaker labels) onto a <canvas>; we capture THAT canvas
-// with MediaRecorder and mix the speakers' audio, so the exported file is
+// app/exporter.js — export the composed canvas preview as a real, playable video file for download.
+// The preview already paints the selected preset composition (real uploaded frames + speaker labels) onto a <canvas>. 
+// We capture THAT canvas with MediaRecorder and mix the speakers' audio, so the exported file is
 // exactly what the creator sees — no seeded media, no placeholder frames.
 // Classic script — exposed on window.PDC.exporter.
 (function () {

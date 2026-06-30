@@ -94,17 +94,104 @@
     btn.setAttribute("aria-pressed", String(p.id === episode.presetId));
     btn.innerHTML = "<strong>" + p.name + "</strong><span>" + p.description + "</span>";
     btn.addEventListener("click", function () {
-      setPreset(episode, p.id);
-      Array.prototype.forEach.call(presetsEl.children, function (c) {
-        const on = c.dataset.preset === p.id;
+      if (editor.isOpen()) closeEditor();
+      applyLayout(p.id);
+    });
+    presetsEl.appendChild(btn);
+  });
+
+  const templatesEl = $("templates");
+  const editor = PDC.editor.createEditor({
+    overlayEl: $("edit-overlay"),
+    onChange: function (rects) {
+      // Live: feed the dragged/resized rects to the preview as a draft layout.
+      PDC.templates.setDraft(rects);
+      setPreset(episode, PDC.templates.DRAFT_ID);
+      preview.render(episode);
+    },
+  });
+
+  // The id + display name of the currently selected layout (preset or template).
+  function currentLayout() {
+    const preset = PDC.presets.getPreset(episode.presetId);
+    if (preset) return { id: preset.id, name: preset.name };
+    const t = PDC.templates.getTemplate(episode.presetId);
+    if (t) return { id: t.id, name: t.name };
+    return { id: episode.presetId || "custom", name: "Custom" };
+  }
+
+  // Apply any layout (preset id or saved template id) and sync selection state.
+  function applyLayout(id) {
+    setPreset(episode, id);
+    markSelected(id);
+    preview.render(episode);
+    if (canCompose(episode)) preview.play();
+    refresh();
+  }
+
+  function markSelected(id) {
+    [presetsEl, templatesEl].forEach(function (group) {
+      Array.prototype.forEach.call(group.children, function (c) {
+        const on = c.dataset.layout === id || c.dataset.preset === id;
         c.classList.toggle("selected", on);
         c.setAttribute("aria-pressed", String(on));
       });
-      preview.render(episode);
-      if (canCompose(episode)) preview.play();
-      refresh();
     });
-    presetsEl.appendChild(btn);
+  }
+
+  function renderTemplates() {
+    templatesEl.innerHTML = "";
+    PDC.templates.listTemplates().forEach(function (t) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "preset template" + (t.id === episode.presetId ? " selected" : "");
+      btn.dataset.layout = t.id;
+      btn.setAttribute("aria-pressed", String(t.id === episode.presetId));
+      btn.innerHTML = "<strong>" + t.name + "</strong><span>Custom layout</span>";
+      btn.addEventListener("click", function () {
+        if (editor.isOpen()) closeEditor();
+        applyLayout(t.id);
+      });
+      templatesEl.appendChild(btn);
+    });
+  }
+
+  function openEditor() {
+    if (!canCompose(episode)) return;
+    const buckets = assignedBuckets(episode);
+    const initial = PDC.templates.resolveLayout(episode, buckets.length);
+    editor.open(buckets, initial, function (b) { return speakerName(episode, b); });
+    $("customize-edit").hidden = false;
+    $("customize-hint").hidden = false;
+    $("customize").textContent = "✎ Editing layout";
+    $("customize").disabled = true;
+  }
+
+  function closeEditor() {
+    editor.close();
+    PDC.templates.clearDraft();
+    $("customize-edit").hidden = true;
+    $("customize-hint").hidden = true;
+    $("customize").textContent = "✎ Customize layout";
+    $("customize").disabled = !canCompose(episode);
+  }
+
+  $("customize").addEventListener("click", openEditor);
+  $("cancel-customize").addEventListener("click", function () {
+    // Revert to the previously selected layout (fall back to the first preset).
+    const prev = PDC.templates.isTemplate(episode.presetId) && episode.presetId !== PDC.templates.DRAFT_ID
+      ? episode.presetId
+      : PRESETS[0].id;
+    closeEditor();
+    applyLayout(prev);
+  });
+  $("save-template").addEventListener("click", function () {
+    const name = ($("template-name").value || "").trim() || "Custom layout";
+    const t = PDC.templates.saveTemplate(name, editor.getRects());
+    $("template-name").value = "";
+    closeEditor();
+    renderTemplates();
+    applyLayout(t.id);
   });
 
   $("play").addEventListener("click", function () {
@@ -135,14 +222,14 @@
         fps: 30,
         onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
-      const preset = PDC.presets.getPreset(episode.presetId);
-      const fname = (episode.title || "episode").replace(/[^\w.-]+/g, "_") + "-" + preset.id + ".webm";
+      const layout = currentLayout();
+      const fname = (episode.title || "episode").replace(/[^\w.-]+/g, "_") + "-" + layout.id + ".webm";
       PDC.exporter.download(out.url, fname);
       const result = $("export-result");
       result.hidden = false;
       result.innerHTML =
         "Exported <strong>" + fname + "</strong> — " + Math.round(out.bytes / 1024) + " KB, " +
-        "“" + preset.name + "” layout. " +
+        "“" + layout.name + "” layout. " +
         '<a id="export-download" href="' + out.url + '" download="' + fname + '">Download again</a>';
       // A real playable preview of the exported file (also lets review confirm playback).
       const v = document.createElement("video");
@@ -167,7 +254,7 @@
     $("stage-canvas").classList.toggle("ready", ready);
     $("empty").hidden = ready;
     $("readiness").textContent = ready
-      ? "Previewing " + n + " speaker" + (n === 1 ? "" : "s") + " in the “" + PDC.presets.getPreset(episode.presetId).name + "” layout."
+      ? "Previewing " + n + " speaker" + (n === 1 ? "" : "s") + " in the “" + currentLayout().name + "” layout."
       : readinessReason(episode);
 
     const playBtn = $("play");
@@ -177,8 +264,10 @@
     $("mute").disabled = !ready;
     const exportBtn = $("export");
     if (exportBtn && exportBtn.textContent.indexOf("Exporting") === -1) exportBtn.disabled = !ready;
+    if (!editor.isOpen()) $("customize").disabled = !ready;
   }
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
+  renderTemplates();
   refresh();
 })();
