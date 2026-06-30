@@ -83,10 +83,17 @@
   document.querySelectorAll("input[data-link-bucket]").forEach(function (input) {
     const bucket = input.getAttribute("data-link-bucket");
     function handle() {
-      onSocialLinkChange(bucket, input.value);
+      setSocialLink(episode, bucket, input.value);
+      updateBucketRow(bucket);
+      if (canCompose(episode)) {
+        preview.render(episode);
+        preview.play();
+      }
+      refresh();
     }
-    input.addEventListener("input", handle);
-    input.addEventListener("change", handle);
+    ["input", "change"].forEach(function (evt) {
+      input.addEventListener(evt, handle);
+    });
   });
 
   const presetsEl = $("presets");

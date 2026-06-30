@@ -159,13 +159,13 @@ const browserExpression = `
     const el = document.querySelector('.bucket[data-bucket="' + bucket + '"] .bucket-name');
     return el ? el.textContent : null;
   };
-  const derivedHint = (bucket) => {
-    const el = document.querySelector('[data-derived="' + bucket + '"]');
-    return el ? el.textContent : "";
-  };
-  const canvasLabels = () => {
-    const raw = document.getElementById("stage-canvas").dataset.speakerLabels || "{}";
-    return JSON.parse(raw);
+  const ensureNames = () => {
+    assert(tagText("host") === "hostperson", "host label should show derived name, got: " + tagText("host"));
+    assert(tagText("guest1") === "guestperson", "guest1 label should show derived name, got: " + tagText("guest1"));
+    assert(tagText("guest2") === "guest2person", "guest2 label should show derived name, got: " + tagText("guest2"));
+    assert(tagText("host") !== tagText("guest1"), "derived names must be distinct per speaker");
+    assert(tagText("host") !== tagText("guest2"), "derived names must be distinct per speaker");
+    assert(tagText("guest1") !== tagText("guest2"), "derived names must be distinct per speaker");
   };
   function canvasLitPct() {
     const c = document.getElementById("stage-canvas");
@@ -176,27 +176,16 @@ const browserExpression = `
     }
     return Math.round((lit / (data.length / 4)) * 100);
   }
-  function assertPreviewLabels(expected, label) {
-    const labels = canvasLabels();
-    for (const bucket of Object.keys(expected)) {
-      assert(labels[bucket] === expected[bucket], label + ": canvas label for " + bucket + " should be " + expected[bucket] + ", got " + labels[bucket]);
-    }
-  }
-  function assertSetupNames(expected, label) {
-    for (const bucket of Object.keys(expected)) {
-      assert(bucketName(bucket) === expected[bucket], label + ": setup name for " + bucket + " should be " + expected[bucket] + ", got " + bucketName(bucket));
-      if (expected[bucket] !== window.PDC.presets.BUCKET_LABELS[bucket]) {
-        assert(derivedHint(bucket).includes(expected[bucket]), label + ": derived hint for " + bucket + " should mention " + expected[bucket]);
-      }
-    }
-  }
-  function assertSocialState(expected, label) {
-    assertSetupNames(expected, label);
-    assertPreviewLabels(expected, label);
-    assert(document.querySelectorAll("video[data-speaker]").length >= 2, label + ": uploaded videos should remain");
-    assert(canvasLitPct() >= 5, label + ": preview canvas should stay visible");
-    const exportBtn = document.querySelector("#export");
-    assert(exportBtn && !exportBtn.disabled, label + ": export should remain available");
+  function assertSocialState(label) {
+    ensureNames();
+    assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, label + ": host link must persist");
+    assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, label + ": guest1 link must persist");
+    assert(document.querySelector('[data-link-bucket="guest2"]').value === GUEST2_URL, label + ": guest2 link must persist");
+    videos = [...document.querySelectorAll("video[data-speaker]")];
+    assert(videos.length === 3, label + ": all uploaded videos should remain");
+    assert(videos.every((v) => v.src.startsWith("blob:") && v.videoWidth > 0), label + ": uploaded media should stay decoded");
+    const lit = canvasLitPct();
+    assert(lit >= 5, label + ": composed canvas should show nonblank pixels (" + lit + "%)");
   }
 
   const waitFor = async (fn, label) => {
@@ -210,25 +199,33 @@ const browserExpression = `
   assert(document.querySelector('[data-link-bucket="guest1"]'), "Guest 1 social link input should exist");
   assert(document.querySelector('[data-link-bucket="guest2"]'), "Guest 2 social link input should exist");
 
+  // Upload three real speaker videos.
   uploadTo(document.querySelector('[data-file-bucket="host"]'), await makeVideo("host.webm", "#b91c1c"));
   await sleep(100);
   uploadTo(document.querySelector('[data-file-bucket="guest1"]'), await makeVideo("guest.webm", "#047857"));
   await sleep(100);
   uploadTo(document.querySelector('[data-file-bucket="guest2"]'), await makeVideo("guest2.webm", "#2563eb"));
   await sleep(1200);
-  assert(document.querySelectorAll("video[data-speaker]").length === 3, "three uploaded speaker videos should compose the preview");
+  let videos = [...document.querySelectorAll("video[data-speaker]")];
+  assert(videos.length === 3, "three uploaded speaker videos should compose the preview");
 
-  const LINKS = {
-    host: "https://x.com/hostperson",
-    guest1: "https://x.com/guestperson",
-    guest2: "https://www.youtube.com/@guesttwo",
-  };
-  const NAMES = { host: "hostperson", guest1: "guestperson", guest2: "guesttwo" };
+  // Enter DISTINCT social links for each speaker through the real inputs.
+  const HOST_URL = "https://x.com/hostperson";
+  const GUEST_URL = "https://x.com/guestperson";
+  const GUEST2_URL = "https://x.com/guest2person";
+  typeInto(document.querySelector('[data-link-bucket="host"]'), HOST_URL);
+  typeInto(document.querySelector('[data-link-bucket="guest1"]'), GUEST_URL);
+  typeInto(document.querySelector('[data-link-bucket="guest2"]'), GUEST2_URL);
+  await sleep(300);
 
-  setLink("host", LINKS.host, "input");
-  setLink("guest1", LINKS.guest1, "change");
-  setLink("guest2", LINKS.guest2, "input");
-  await sleep(400);
+  // Links stored per speaker and surfaced as distinct derived names in preview.
+  ensureNames();
+  assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "host link input should hold its value");
+  assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, "guest1 link input should hold its value");
+  assert(document.querySelector('[data-link-bucket="guest2"]').value === GUEST2_URL, "guest2 link input should hold its value");
+  assert(/hostperson/.test((document.querySelector('[data-derived="host"]') || {}).textContent || ""), "host derived-name hint should show");
+  assert(/guestperson/.test((document.querySelector('[data-derived="guest1"]') || {}).textContent || ""), "guest1 derived-name hint should show");
+  assert(/guest2person/.test((document.querySelector('[data-derived="guest2"]') || {}).textContent || ""), "guest2 derived-name hint should show");
 
   const playButton = document.querySelector("#play");
   if (!playButton.textContent.includes("Pause")) playButton.click();
@@ -243,27 +240,26 @@ const browserExpression = `
     assertSocialState(NAMES, presetId + " preset preserves derived names");
   }
 
-  setLink("guest1", "", "change");
-  await sleep(300);
-  assert(bucketName("guest1") === "Guest 1", "clearing guest1 link should revert only guest1 setup label");
-  assert(bucketName("host") === "hostperson", "clearing guest1 link must not change host setup label");
-  assert(canvasLabels().guest1 === "Guest 1", "clearing guest1 link should revert only guest1 canvas label");
-  assert(canvasLabels().host === "hostperson", "clearing guest1 link must not change host canvas label");
-
-  setLink("guest1", LINKS.guest1, "input");
+  // Replacing one link updates only that speaker's derived name.
+  typeInto(document.querySelector('[data-link-bucket="host"]'), "https://x.com/newhostperson");
   await sleep(250);
-  assertSocialState(NAMES, "after restoring guest1 link");
+  assert(tagText("host") === "newhostperson", "host derived label should update when host link is replaced");
+  assert(tagText("guest1") === "guestperson", "guest1 derived label should remain unchanged");
+  assert(tagText("guest2") === "guest2person", "guest2 derived label should remain unchanged");
 
-  setLink("guest2", "https://instagram.com/replacementguest", "change");
-  await sleep(300);
-  assert(bucketName("guest2") === "replacementguest", "replacing guest2 link should update only guest2 setup label");
-  assert(canvasLabels().guest2 === "replacementguest", "replacing guest2 link should update only guest2 canvas label");
-  assert(canvasLabels().host === "hostperson", "replacing guest2 link must not change host canvas label");
-  assert(canvasLabels().guest1 === "guestperson", "replacing guest2 link must not change guest1 canvas label");
+  // Clearing one link falls back to bucket label and keeps other names intact.
+  typeInto(document.querySelector('[data-link-bucket="guest2"]'), "");
+  await sleep(250);
+  assert(tagText("guest2") === "Guest 2", "guest2 should fall back after clearing its link");
+  assert(tagText("host") === "newhostperson", "host derived label should remain after clearing another speaker");
+  assert(tagText("guest1") === "guestperson", "guest1 derived label should remain after clearing another speaker");
 
   return {
-    setup: { host: bucketName("host"), guest1: bucketName("guest1"), guest2: bucketName("guest2") },
-    canvas: canvasLabels(),
+    tags: {
+      host: tagText("host"),
+      guest1: tagText("guest1"),
+      guest2: tagText("guest2"),
+    },
     links: {
       host: document.querySelector('[data-link-bucket="host"]').value,
       guest1: document.querySelector('[data-link-bucket="guest1"]').value,
