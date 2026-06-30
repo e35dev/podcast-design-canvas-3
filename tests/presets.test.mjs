@@ -47,3 +47,14 @@ test("spotlight preset gives the host the full stage and guests a PiP inset", ()
   assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 100 });
   assert.ok(rects[1].w < 50 && rects[1].h < 50, "guest is a small inset");
 });
+
+test("split, stack, and spotlight each produce a distinct two-speaker layout", () => {
+  const fingerprint = (id) =>
+    getPreset(id).layout(2).map((r) => `${r.x},${r.y},${r.w},${r.h}`).join("|");
+  const split = fingerprint("split");
+  const stack = fingerprint("stack");
+  const spotlight = fingerprint("spotlight");
+  assert.notEqual(split, stack, "Split and Stack must differ");
+  assert.notEqual(stack, spotlight, "Stack and Spotlight must differ");
+  assert.notEqual(split, spotlight, "Split and Spotlight must differ");
+});

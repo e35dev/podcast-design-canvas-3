@@ -24,7 +24,8 @@
         v = document.createElement("video");
         v.muted = true; // muted is required for programmatic autoplay
         v.loop = true;
-        v.playsInline = true;
+        v.autoplay = true; // re-attaching on a preset switch auto-resumes, so a
+        v.playsInline = true; // layout change never leaves a paused/black frame
         v.setAttribute("playsinline", "");
         v.preload = "auto";
         v.dataset.speaker = bucket;
