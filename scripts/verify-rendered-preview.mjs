@@ -1,10 +1,14 @@
 // scripts/verify-rendered-preview.mjs
-// Drives the shipped app in headless Chrome and proves the active #32 workflow:
+// Drives the shipped app in headless Chrome and proves the active #41 workflow:
 // upload two local video files through the real file input, assign Host/Guest
-// buckets, render decoded uploaded pixels in the composed preview, and preserve
-// those videos across an ordinary preset switch. No fixtures or product-only
-// shortcuts are used; the WebM files are generated in-browser and uploaded as
-// real File objects through the visible input.
+// buckets, enter distinct per-speaker social links, render decoded uploaded
+// pixels in the composed preview, then ACTIVELY switch between Split, Stack, and
+// Spotlight while the preview is playing and assert that the composed layout
+// actually CHANGES per preset (each speaker video's on-screen bounding rect is
+// distinct across all three presets) while the videos keep playing/non-blank and
+// the uploads, bucket assignments, and social-derived names are all preserved.
+// No fixtures or product-only shortcuts are used; the WebM files are generated
+// in-browser and uploaded as real File objects through the visible input.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -173,6 +177,14 @@ const browserExpression = `
     return new File(chunks, name, { type: "video/webm" });
   }
 
+  // Wait for the app's classic scripts to finish wiring the DOM (the page may
+  // still be loading when this evaluates), then assert the controls exist.
+  const waitFor = async (fn, label) => {
+    for (let i = 0; i < 100; i++) { if (fn()) return; await sleep(50); }
+    throw new Error(label);
+  };
+  await waitFor(() => window.PDC && window.PDC.preview, "PDC namespace should load");
+  await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
   assert(window.PDC, "PDC namespace should load");
   assert(document.querySelector("#files"), "multi-speaker upload input should exist");
   assert(document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
@@ -189,12 +201,24 @@ const browserExpression = `
     input.files = dataTransfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }
+  function typeInto(input, value) {
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 
   uploadTo(document.querySelector('[data-file-bucket="host"]'), host);
   await sleep(100);
   uploadTo(document.querySelector('[data-file-bucket="guest1"]'), guest);
 
   await sleep(1200);
+
+  // Enter DISTINCT social links so we can prove the social context survives the
+  // active preset switching required by #41.
+  const HOST_URL = "https://x.com/hostperson";
+  const GUEST_URL = "https://x.com/guestperson";
+  typeInto(document.querySelector('[data-link-bucket="host"]'), HOST_URL);
+  typeInto(document.querySelector('[data-link-bucket="guest1"]'), GUEST_URL);
+  await sleep(200);
   const videos = [...document.querySelectorAll("#stage video")];
   assert(videos.length === 2, "stage should contain two speaker videos after upload");
   await Promise.all(
@@ -236,24 +260,72 @@ const browserExpression = `
   assert(beforeSwitch.every((item) => !item.paused), "videos should be playing after Play click");
   assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "videos should start in sync");
 
-  document.querySelector('[data-preset="spotlight"]').click();
-  await sleep(300);
-  const afterSwitch = [...document.querySelectorAll("#stage video")].map((video) => ({
-    speaker: video.dataset.speaker,
-    width: video.videoWidth,
-    height: video.videoHeight,
-    srcIsBlob: video.src.startsWith("blob:"),
-  }));
+  // --- #41: actively switch Split -> Stack -> Spotlight while the preview is
+  // playing and prove the composed layout actually CHANGES per preset, that the
+  // videos keep playing/non-blank, and that uploads + bucket assignments +
+  // social-derived names are preserved across every switch. The on-screen
+  // geometry is read from each speaker video's getBoundingClientRect so the
+  // assertion reflects what a maintainer literally sees, not just model state.
+  const tagText = (bucket) => {
+    const el = document.querySelector('[data-speaker-tag="' + bucket + '"]');
+    return el ? el.textContent : null;
+  };
+  const rectKey = (r) => [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(",");
 
-  assert(document.querySelector("#stage").dataset.preset === "spotlight", "preset switch should update the stage");
-  assert(afterSwitch.length === 2, "preset switch should preserve both uploaded videos");
-  assert(afterSwitch.every((item) => item.srcIsBlob && item.width > 0 && item.height > 0), "preset switch should keep decoded upload media");
+  async function applyPreset(presetId) {
+    const btn = document.querySelector('[data-preset="' + presetId + '"]');
+    assert(btn, "preset control " + presetId + " should exist");
+    btn.click();
+    await sleep(350);
+    assert(document.querySelector("#stage").dataset.preset === presetId, "preset switch should update the stage to " + presetId);
+    const vids = [...document.querySelectorAll("#stage video")];
+    assert(vids.length === 2, "preset " + presetId + " should preserve both uploaded videos");
+    const geom = {};
+    for (const v of vids) {
+      const r = v.getBoundingClientRect();
+      assert(v.src.startsWith("blob:"), "preset " + presetId + ": video must stay backed by uploaded blob URL");
+      assert(v.videoWidth > 0 && v.videoHeight > 0, "preset " + presetId + ": video must stay decoded (non-blank)");
+      assert(!v.paused, "preset " + presetId + ": video must keep playing across re-layout");
+      assert(r.width > 1 && r.height > 1, "preset " + presetId + ": video must have a visible on-screen rect");
+      geom[v.dataset.speaker] = rectKey(r);
+    }
+    // Uploads + bucket assignments preserved.
+    assert(document.querySelectorAll(".bucket.filled").length === 2, "preset " + presetId + ": both buckets must stay filled");
+    assert(document.querySelector('[data-file-bucket="host"]'), "preset " + presetId + ": host control preserved");
+    // Social-derived names preserved.
+    assert(tagText("host") === "hostperson", "preset " + presetId + ": host derived name must persist, got " + tagText("host"));
+    assert(tagText("guest1") === "guestperson", "preset " + presetId + ": guest1 derived name must persist, got " + tagText("guest1"));
+    // Link inputs still hold their values.
+    assert(document.querySelector('[data-link-bucket="host"]').value === HOST_URL, "preset " + presetId + ": host link must persist");
+    assert(document.querySelector('[data-link-bucket="guest1"]').value === GUEST_URL, "preset " + presetId + ": guest1 link must persist");
+    return geom;
+  }
+
+  const layouts = {
+    split: await applyPreset("split"),
+    stack: await applyPreset("stack"),
+    spotlight: await applyPreset("spotlight"),
+  };
+
+  // The composed preview must visibly change layout: each speaker's on-screen
+  // rect must be DISTINCT across all three presets (not just a label/data swap).
+  for (const speaker of ["host", "guest1"]) {
+    const keys = [layouts.split[speaker], layouts.stack[speaker], layouts.spotlight[speaker]];
+    const distinct = new Set(keys).size;
+    assert(distinct === 3, speaker + " composed geometry must differ for split/stack/spotlight, got " + JSON.stringify(keys));
+  }
+
+  // Switching back to the first preset must restore its geometry (a real
+  // re-layout of the same elements, not a one-way transition).
+  const splitAgain = await applyPreset("split");
+  assert(splitAgain.host === layouts.split.host && splitAgain.guest1 === layouts.split.guest1, "switching back to split must restore its layout");
 
   return {
     readiness: document.querySelector("#readiness").textContent,
     filledBuckets: [...document.querySelectorAll(".bucket.filled")].map((bucket) => bucket.dataset.bucket),
+    derivedNames: { host: tagText("host"), guest1: tagText("guest1") },
     beforeSwitch,
-    afterSwitch,
+    layouts,
   };
 })()
 `;

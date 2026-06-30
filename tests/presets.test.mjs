@@ -47,3 +47,38 @@ test("spotlight preset gives the host the full stage and guests a PiP inset", ()
   assert.deepEqual(rects[0], { x: 0, y: 0, w: 100, h: 100 });
   assert.ok(rects[1].w < 50 && rects[1].h < 50, "guest is a small inset");
 });
+
+// #41: switching presets must actually transform the live preview, so the three
+// shipped presets MUST produce distinct geometry for the speaker counts the
+// product supports. If any two presets returned identical rects, a preset switch
+// would be a no-op on screen.
+const rectsKey = (rects) => JSON.stringify(rects.map((r) => [r.x, r.y, r.w, r.h]));
+
+for (const n of [2, 3]) {
+  test(`split, stack, and spotlight produce pairwise-distinct layouts for ${n} speakers`, () => {
+    const split = rectsKey(getPreset("split").layout(n));
+    const stack = rectsKey(getPreset("stack").layout(n));
+    const spotlight = rectsKey(getPreset("spotlight").layout(n));
+    assert.notEqual(split, stack, `split and stack must differ for ${n} speakers`);
+    assert.notEqual(split, spotlight, `split and spotlight must differ for ${n} speakers`);
+    assert.notEqual(stack, spotlight, `stack and spotlight must differ for ${n} speakers`);
+    assert.equal(new Set([split, stack, spotlight]).size, 3, `all three presets must be distinct for ${n} speakers`);
+  });
+
+  test(`every speaker has a distinct rect within each preset for ${n} speakers`, () => {
+    for (const p of PRESETS) {
+      const keys = p.layout(n).map((r) => `${r.x},${r.y},${r.w},${r.h}`);
+      assert.equal(new Set(keys).size, n, `${p.id} should place each of ${n} speakers in its own rect`);
+    }
+  });
+}
+
+test("stack preset stacks speakers in full-width rows that change with count", () => {
+  const two = getPreset("stack").layout(2);
+  assert.deepEqual(two[0], { x: 0, y: 0, w: 100, h: 50 });
+  assert.deepEqual(two[1], { x: 0, y: 50, w: 100, h: 50 });
+  const three = getPreset("stack").layout(3);
+  assert.equal(three.length, 3);
+  assert.ok(three.every((r) => r.w === 100), "stack rows are full width");
+  assert.ok(three[1].y > three[0].y && three[2].y > three[1].y, "rows descend the stage");
+});
