@@ -1,7 +1,8 @@
 // scripts/verify-rendered-preview.mjs
-// Drives the shipped app in headless Chrome and proves issue #41: upload Host +
-// Guest videos, confirm nonblank decoded pixels, and visibly recompose across
-// Split, Stack, and Spotlight without losing uploaded media.
+// Drives the shipped app in headless Chrome and proves issue #41/#58: upload Host +
+// Guest videos (including Guest 2), confirm nonblank decoded pixels, visibly
+// recompose across Split, Stack, and Spotlight without losing uploaded media,
+// and assert Stack/Spotlight geometry with real per-region video pixels.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -187,16 +188,105 @@ const browserExpression = `
   await waitFor(() => document.querySelector('[data-link-bucket="host"]'), "Host social link input should exist");
   await waitFor(() => document.querySelector("#play") && document.querySelector("#play").disabled, "play should start disabled before uploads");
 
-  function layoutSignature() {
+  function layoutSignature(speakerCount) {
     const presetId = document.querySelector("#stage-canvas").dataset.preset;
     const preset = window.PDC.presets.getPreset(presetId);
-    return preset.layout(2).map((rect, i) => ({
-      speaker: i === 0 ? "host" : "guest1",
+    const n = speakerCount || Number(document.querySelector("#stage-canvas").dataset.speakers) || 2;
+    const buckets = ["host", "guest1", "guest2"];
+    return preset.layout(n).map((rect, i) => ({
+      speaker: buckets[i] || "guest" + i,
       left: rect.x,
       top: rect.y,
       width: rect.w,
       height: rect.h,
     }));
+  }
+
+  function regionAvgColor(xStartPct, yStartPct, xEndPct, yEndPct) {
+    const c = document.getElementById("stage-canvas");
+    const w = c.width;
+    const h = c.height;
+    const data = c.getContext("2d").getImageData(0, 0, w, h).data;
+    const x0 = Math.floor(xStartPct / 100 * w);
+    const x1 = Math.floor(xEndPct / 100 * w);
+    const y0 = Math.floor(yStartPct / 100 * h);
+    const y1 = Math.floor(yEndPct / 100 * h);
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let n = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const idx = (y * w + x) * 4;
+        r += data[idx];
+        g += data[idx + 1];
+        b += data[idx + 2];
+        n++;
+      }
+    }
+    return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) };
+  }
+
+  function dominantChannel(color) {
+    if (color.r > color.g + 25 && color.r > color.b + 25) return "red";
+    if (color.g > color.r + 25 && color.g > color.b + 25) return "green";
+    if (color.b > color.r + 25 && color.b > color.g + 25) return "blue";
+    return "mixed";
+  }
+
+  function assertRegionColor(label, x0, y0, x1, y1, expected) {
+    const color = regionAvgColor(x0, y0, x1, y1);
+    const dom = dominantChannel(color);
+    assert(
+      dom === expected,
+      label + ": expected " + expected + "-dominant pixels, got " + dom + " (" + JSON.stringify(color) + ")",
+    );
+    return color;
+  }
+
+  function assertStackRowsVisible() {
+    const rects = window.PDC.presets.getPreset("stack").layout(3);
+    assert(rects.length === 3, "stack should lay out three speakers");
+    const rowColors = rects.map((rect, i) => {
+      const pad = Math.min(4, rect.h * 0.15);
+      const color = regionAvgColor(
+        rect.x + 2,
+        rect.y + pad,
+        rect.x + rect.w - 2,
+        rect.y + rect.h - pad,
+      );
+      return { row: i, color, dom: dominantChannel(color) };
+    });
+    assert(rowColors[0].dom === "red", "stack row 1 should show the host feed");
+    assert(rowColors[1].dom === "green", "stack row 2 should show Guest 1 feed");
+    assert(rowColors[2].dom === "blue", "stack row 3 should show Guest 2 feed");
+    return rowColors;
+  }
+
+  function assertSpotlightComposition() {
+    const rects = window.PDC.presets.getPreset("spotlight").layout(3);
+    assert(rects[0].w === 100 && rects[0].h === 100, "spotlight host should fill the stage");
+    assert(rects[1].w < 50 && rects[1].h < 50, "spotlight guest overlays should be PiP insets");
+    const center = assertRegionColor("spotlight center", 25, 25, 75, 75, "red");
+    const guest1 = rects[1];
+    assertRegionColor(
+      "spotlight guest1 PiP",
+      guest1.x + 2,
+      guest1.y + 2,
+      guest1.x + guest1.w - 2,
+      guest1.y + guest1.h - 2,
+      "green",
+    );
+    const guest2 = rects[2];
+    assertRegionColor(
+      "spotlight guest2 PiP",
+      guest2.x + 2,
+      guest2.y + 2,
+      guest2.x + guest2.w - 2,
+      guest2.y + guest2.h - 2,
+      "blue",
+    );
+    return { hostRect: rects[0], guestRects: [rects[1], rects[2]], center };
   }
 
   function canvasLitPct() {
@@ -228,6 +318,7 @@ const browserExpression = `
   const hostName = "<img src=x onerror=document.body.dataset.injected=1>.webm";
   const host = await makeVideo(hostName, "#b91c1c");
   const guest = await makeVideo("guest.webm", "#047857");
+  const guest2 = await makeVideo("guest2.webm", "#2563eb");
 
   function uploadTo(input, file) {
     const dataTransfer = new DataTransfer();
@@ -239,10 +330,12 @@ const browserExpression = `
   uploadTo(document.querySelector('[data-file-bucket="host"]'), host);
   await sleep(100);
   uploadTo(document.querySelector('[data-file-bucket="guest1"]'), guest);
+  await sleep(100);
+  uploadTo(document.querySelector('[data-file-bucket="guest2"]'), guest2);
 
   await sleep(1200);
   const videos = hiddenVideos();
-  assert(videos.length === 2, "two hidden decoder videos should exist after upload");
+  assert(videos.length === 3, "three hidden decoder videos should exist after upload");
   await Promise.all(
     videos.map((video) =>
       video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
@@ -258,9 +351,11 @@ const browserExpression = `
   }
   typeSocial("host", "https://x.com/hostperson");
   typeSocial("guest1", "https://x.com/guestperson");
+  typeSocial("guest2", "https://x.com/guesttwo");
   await sleep(300);
   assert(document.querySelector('.bucket[data-bucket="host"] .bucket-name').textContent === "hostperson");
   assert(document.querySelector('.bucket[data-bucket="guest1"] .bucket-name').textContent === "guestperson");
+  assert(document.querySelector('.bucket[data-bucket="guest2"] .bucket-name').textContent === "guesttwo");
 
   const hostStatus = document.querySelector('[data-status="host"]');
   const guestStatus = document.querySelector('[data-status="guest1"]');
@@ -268,7 +363,7 @@ const browserExpression = `
   assert(hostStatus.innerHTML.includes("&lt;img"), "host filename markup should be escaped");
   assert(document.body.dataset.injected !== "1", "host filename must not execute markup");
   assert(guestStatus && guestStatus.textContent === "guest.webm", "guest bucket should show uploaded filename");
-  assert(document.querySelectorAll(".bucket.filled").length === 2, "two buckets should be filled");
+  assert(document.querySelectorAll(".bucket.filled").length === 3, "three buckets should be filled");
 
   const playButton = document.querySelector("#play");
   assert(!playButton.disabled, "play control should be reachable after uploads");
@@ -294,33 +389,41 @@ const browserExpression = `
   assert(Math.abs(beforeSwitch[0].time - beforeSwitch[1].time) < 0.25, "videos should start in sync");
   assertCanvasVisible("split preset");
 
-  const splitLayout = layoutSignature();
+  const splitLayout = layoutSignature(2);
   assert(splitLayout.length === 2, "split should lay out two speakers");
   assert(splitLayout[0].left === 0 && splitLayout[1].left === 50, "split should place speakers side by side");
 
   await clickPreset("stack");
   assert(document.querySelector("#stage-canvas").dataset.preset === "stack", "preset switch should update the canvas to stack");
-  const stackLayout = layoutSignature();
-  assert(stackLayout[0].top === 0 && stackLayout[1].top === 50, "stack should place speakers in rows");
-  assert(JSON.stringify(splitLayout) !== JSON.stringify(stackLayout), "stack layout should differ from split");
+  assert(document.querySelector("#stage-canvas").dataset.speakers === "3", "stack should compose three speakers");
+  const stackLayout = layoutSignature(3);
+  assert(stackLayout[0].top === 0 && stackLayout[1].top === 33.333 && stackLayout[2].top === 66.667, "stack should place speakers in three rows");
+  assert(JSON.stringify(splitLayout) !== JSON.stringify(stackLayout.slice(0, 2)), "stack layout should differ from split");
   assertCanvasVisible("stack preset");
+  const stackRows = assertStackRowsVisible();
 
   await clickPreset("spotlight");
   assert(document.querySelector("#stage-canvas").dataset.preset === "spotlight", "preset switch should update the canvas to spotlight");
-  const spotlightLayout = layoutSignature();
+  const spotlightLayout = layoutSignature(3);
   assert(spotlightLayout[0].width === 100 && spotlightLayout[0].height === 100, "spotlight host should fill the stage");
   assert(spotlightLayout[1].width < 50 && spotlightLayout[1].height < 50, "spotlight guest should be a PiP inset");
   assert(JSON.stringify(stackLayout) !== JSON.stringify(spotlightLayout), "spotlight layout should differ from stack");
   const spotlightLit = assertCanvasVisible("spotlight preset");
+  const spotlightRegions = assertSpotlightComposition();
 
   assert(hostStatus.textContent === hostName, "host filename should survive preset cycling");
   assert(guestStatus.textContent === "guest.webm", "guest filename should survive preset cycling");
+  assert(document.querySelector('[data-export]') || document.querySelector("#export"), "export control should remain available");
+  const exportBtn = document.querySelector("#export");
+  assert(exportBtn && !exportBtn.disabled, "export should stay enabled after preset cycling");
 
   return {
     readiness: document.querySelector("#readiness").textContent,
     filledBuckets: [...document.querySelectorAll(".bucket.filled")].map((bucket) => bucket.dataset.bucket),
     beforeSwitch,
     layouts: { split: splitLayout, stack: stackLayout, spotlight: spotlightLayout },
+    stackRows,
+    spotlightRegions,
     canvasLitPct: spotlightLit,
     afterSpotlight: hiddenVideos().map((video) => ({
       speaker: video.dataset.speaker,

@@ -48,13 +48,11 @@
       description: "Stacked rows, full-width speakers.",
       layout(n) {
         const count = Math.max(1, n);
-        const h = 100 / count;
-        return Array.from({ length: count }, (_, i) => ({
-          x: 0,
-          y: i * h,
-          w: 100,
-          h,
-        }));
+        return Array.from({ length: count }, (_, i) => {
+          const y = Math.round(((100 * i) / count) * 1000) / 1000;
+          const yNext = Math.round(((100 * (i + 1)) / count) * 1000) / 1000;
+          return { x: 0, y, w: 100, h: yNext - y };
+        });
       },
     },
     {
