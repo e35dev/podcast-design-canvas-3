@@ -134,19 +134,13 @@ const browserExpression = String.raw`
 
   await sleep(250);
   assert(!document.querySelector("#play").disabled, "preview should be enabled after two uploads");
-  document.querySelector("#audio-leveling").value = "broadcast";
-  document.querySelector("#audio-leveling").dispatchEvent(new Event("change", { bubbles: true }));
-  document.querySelector("#audio-clarity").value = "bright";
-  document.querySelector("#audio-clarity").dispatchEvent(new Event("change", { bubbles: true }));
-  document.querySelector("#audio-noise").value = "strong";
-  document.querySelector("#audio-noise").dispatchEvent(new Event("change", { bubbles: true }));
+  document.querySelector("#audio-quality").value = "speech-clarity";
+  document.querySelector("#audio-quality").dispatchEvent(new Event("change", { bubbles: true }));
 
   document.querySelector("#play").click();
   await sleep(500);
   assert(window.PDC.previewController.audioTracks().length > 0, "preview should expose a mixed audio track");
-  assert(window.PDC.currentEpisode.audio.leveling === "broadcast", "leveling setting should persist");
-  assert(window.PDC.currentEpisode.audio.clarity === "bright", "clarity setting should persist");
-  assert(window.PDC.currentEpisode.audio.noise === "strong", "noise setting should persist");
+  assert(window.PDC.currentEpisode.audioQuality === "speech-clarity", "speech-clarity setting should persist");
 
   document.querySelector("#export").click();
   await waitFor(() => document.querySelector("#export-playback"), "export playback should exist", 120);

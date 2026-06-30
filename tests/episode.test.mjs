@@ -132,14 +132,10 @@ test("custom layouts can be saved, reapplied, and survive preset round-trips", (
   assert.deepEqual(active.rects.guest1, draft.guest1);
 });
 
-test("audio settings normalize to supported creator-facing choices", () => {
+test("audio quality normalizes to supported creator-facing choices", () => {
   const ep = E.createEpisode({});
-  E.setAudioSetting(ep, "leveling", "broadcast");
-  E.setAudioSetting(ep, "clarity", "bright");
-  E.setAudioSetting(ep, "noise", "strong");
-  assert.deepEqual(ep.audio, { leveling: "broadcast", clarity: "bright", noise: "strong" });
-  E.setAudioSetting(ep, "leveling", "bad-value");
-  E.setAudioSetting(ep, "clarity", "bad-value");
-  E.setAudioSetting(ep, "noise", "bad-value");
-  assert.deepEqual(ep.audio, { leveling: "balanced", clarity: "standard", noise: "light" });
+  E.setAudioQuality(ep, "speech-clarity");
+  assert.equal(ep.audioQuality, "speech-clarity");
+  E.setAudioQuality(ep, "bad-value");
+  assert.equal(ep.audioQuality, "off");
 });

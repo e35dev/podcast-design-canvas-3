@@ -18,7 +18,7 @@
     getTemplate,
     setDraftLayout,
     clearDraftLayout,
-    setAudioSetting,
+    setAudioQuality,
   } = PDC.episode;
 
   const $ = (id) => document.getElementById(id);
@@ -261,11 +261,8 @@
   }
 
   function renderAudioControls() {
-    const audio = episode.audio || {};
-    [["audio-leveling", audio.leveling || "balanced"], ["audio-clarity", audio.clarity || "standard"], ["audio-noise", audio.noise || "light"]].forEach(([id, value]) => {
-      const el = $(id);
-      if (el) el.value = value;
-    });
+    const el = $("audio-quality");
+    if (el) el.value = episode.audioQuality || "off";
   }
 
   function afterMediaChange() {
@@ -363,26 +360,15 @@
     $("mute").textContent = next ? "🔊 Sound on" : "🔇 Muted";
   });
 
-  const audioInputs = [
-    ["audio-leveling", "leveling"],
-    ["audio-clarity", "clarity"],
-    ["audio-noise", "noise"],
-  ];
-  audioInputs.forEach(([id, key]) => {
-    const el = $(id);
-    if (!el) return;
-    el.addEventListener("change", async () => {
-      setAudioSetting(episode, key, el.value);
+  const audioQuality = $("audio-quality");
+  if (audioQuality) {
+    audioQuality.addEventListener("change", async () => {
+      setAudioQuality(episode, audioQuality.value);
       await preview.syncAudio();
       if (preview.isPlaying()) preview.play();
       refresh();
     });
-    el.addEventListener("input", async () => {
-      setAudioSetting(episode, key, el.value);
-      await preview.syncAudio();
-      refresh();
-    });
-  });
+  }
 
   $("export").addEventListener("click", async () => {
     if (!canCompose(episode)) return;
@@ -396,7 +382,7 @@
     try {
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
-        audioSettings: episode.audio,
+        audioQuality: episode.audioQuality,
         onProgress: (p) => { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
       const active = getActiveLayout(episode) || {};

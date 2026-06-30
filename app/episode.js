@@ -56,11 +56,7 @@
       activeTemplateId: null,
       draftLayout: null,
       templates: [],
-      audio: {
-        leveling: "balanced",
-        clarity: "standard",
-        noise: "light",
-      },
+      audioQuality: "off",
     };
   }
 
@@ -223,15 +219,8 @@
     return "";
   }
 
-  function setAudioSetting(episode, key, value) {
-    if (!episode.audio) episode.audio = {};
-    if (key === "leveling") {
-      episode.audio.leveling = ["natural", "balanced", "broadcast"].includes(value) ? value : "balanced";
-    } else if (key === "clarity") {
-      episode.audio.clarity = ["soft", "standard", "bright"].includes(value) ? value : "standard";
-    } else if (key === "noise") {
-      episode.audio.noise = ["off", "light", "strong"].includes(value) ? value : "light";
-    }
+  function setAudioQuality(episode, value) {
+    episode.audioQuality = value === "speech-clarity" ? "speech-clarity" : "off";
     return episode;
   }
 
@@ -255,6 +244,6 @@
     speakerName,
     canCompose,
     readinessReason,
-    setAudioSetting,
+    setAudioQuality,
   };
 })();

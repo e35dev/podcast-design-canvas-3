@@ -70,18 +70,10 @@
     }
 
     function audioProfile() {
-      const audio = (episodeRef && episodeRef.audio) || {};
-      const leveling = audio.leveling || "balanced";
-      const clarity = audio.clarity || "standard";
-      const noise = audio.noise || "light";
+      const quality = episodeRef && episodeRef.audioQuality === "speech-clarity" ? "speech-clarity" : "off";
       return {
-        leveling,
-        clarity,
-        noise,
-        gain: leveling === "natural" ? 0.88 : leveling === "broadcast" ? 1.15 : 1,
-        lowpass: clarity === "soft" ? 6200 : clarity === "bright" ? 14000 : 9800,
-        highShelf: clarity === "soft" ? -3 : clarity === "bright" ? 4 : 1,
-        noiseGain: noise === "off" ? 1 : noise === "strong" ? 0.82 : 0.92,
+        quality,
+        gain: quality === "speech-clarity" ? 1.08 : 1,
       };
     }
 
@@ -142,19 +134,10 @@
             return;
           }
           node.gain = audioCtx.createGain();
-          node.eq = audioCtx.createBiquadFilter();
-          node.eq.type = "lowpass";
-          node.hi = audioCtx.createBiquadFilter();
-          node.hi.type = "highshelf";
-          node.src.connect(node.eq);
-          node.eq.connect(node.hi);
-          node.hi.connect(node.gain);
+          node.src.connect(node.gain);
           node.gain.connect(masterGain);
         }
-        node.eq.frequency.value = profile.lowpass;
-        node.hi.frequency.value = 3200;
-        node.hi.gain.value = profile.highShelf;
-        node.gain.gain.value = profile.noiseGain;
+        node.gain.gain.value = profile.gain;
       });
       return audioDest.stream.getAudioTracks();
     }
