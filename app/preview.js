@@ -231,6 +231,17 @@
         return playing;
       },
       drawFrame,
+      // Live decoder <video> elements (one per assigned speaker), in canonical
+      // order. The exporter reads these to mix the real uploaded audio.
+      getMediaElements: function () {
+        if (!episodeRef) return Object.values(videos);
+        return PDC.episode
+          .assignedBuckets(episodeRef)
+          .map(function (b) {
+            return videos[b];
+          })
+          .filter(Boolean);
+      },
     };
   }
 

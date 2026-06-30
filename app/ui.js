@@ -11,6 +11,21 @@
   const episode = createEpisode({ title: "Episode 1" });
   const preview = PDC.preview.createPreview($("stage-canvas"));
 
+  // Exporter reuses the SAME canvas the preview draws to (so the recorded file
+  // contains real footage in the active preset) and the live decoder videos
+  // (for the real audio mix).
+  const exporter = PDC.exporter.createExporter({
+    canvas: $("stage-canvas"),
+    getMediaElements: function () {
+      return preview.getMediaElements();
+    },
+    getEpisode: function () {
+      return episode;
+    },
+  });
+  let lastExportUrl = null;
+  let exporting = false;
+
   const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogg|ogv|avi|mkv)$/i;
 
   function isVideoFile(file) {
@@ -119,6 +134,95 @@
     $("mute").textContent = next ? "🔊 Sound on" : "🔇 Muted";
   });
 
+  function setExportStatus(text) {
+    const el = $("export-status");
+    if (el) el.textContent = text || "";
+  }
+
+  $("export").addEventListener("click", async function () {
+    if (exporting || !canCompose(episode)) return;
+    exporting = true;
+    const btn = $("export");
+    const progress = $("export-progress");
+    const result = $("export-result");
+    btn.disabled = true;
+    btn.textContent = "● Recording…";
+    if (result) result.hidden = true;
+    if (progress) {
+      progress.hidden = false;
+      progress.value = 0;
+    }
+    setExportStatus("Recording the composed preview…");
+
+    // Make sure the preview is actively drawing real frames while we record.
+    if (!preview.isPlaying()) preview.play();
+
+    try {
+      const plan = exporter.buildPlan();
+      const out = await exporter.record({
+        durationMs: PDC.exporter.DEFAULT_DURATION_MS,
+        fps: 30,
+        onProgress: function (pct) {
+          if (progress) progress.value = pct;
+        },
+      });
+
+      if (!out || !out.blob || out.blob.size < 1) {
+        throw new Error("Export produced an empty file.");
+      }
+
+      if (lastExportUrl) URL.revokeObjectURL(lastExportUrl);
+      lastExportUrl = URL.createObjectURL(out.blob);
+
+      const fileName = PDC.exporter.exportFileName(episode, plan);
+      const link = $("export-download");
+      link.href = lastExportUrl;
+      link.setAttribute("download", fileName);
+      link.textContent = "Download " + fileName + " (" + Math.round(out.blob.size / 1024) + " KB)";
+
+      const video = $("export-video");
+      video.src = lastExportUrl;
+      video.load();
+
+      // Expose the recorded bytes for headless verification (live-run only; not
+      // a committed artifact). The verifier reads window.__lastExport.bytes.
+      try {
+        const buf = await out.blob.arrayBuffer();
+        window.__lastExport = {
+          size: out.blob.size,
+          mimeType: out.mimeType,
+          fileName: fileName,
+          presetId: plan.presetId,
+          tiles: plan.tiles,
+          bytes: Array.from(new Uint8Array(buf.slice(0, 64))),
+        };
+      } catch (e) {
+        window.__lastExport = { size: out.blob.size, mimeType: out.mimeType, fileName: fileName, presetId: plan.presetId };
+      }
+
+      // Trigger the real download.
+      const a = document.createElement("a");
+      a.href = lastExportUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      if (result) result.hidden = false;
+      setExportStatus(
+        "Exported " + Math.round(out.blob.size / 1024) + " KB in the “" + plan.presetName + "” layout with " +
+          plan.tiles.map(function (t) { return t.name; }).join(" + ") + ".",
+      );
+    } catch (err) {
+      setExportStatus("Export failed: " + (err && err.message ? err.message : String(err)));
+    } finally {
+      if (progress) progress.hidden = true;
+      exporting = false;
+      btn.textContent = "⬇ Export episode video";
+      btn.disabled = !canCompose(episode);
+    }
+  });
+
   function refresh() {
     const ready = canCompose(episode);
     const n = assignedBuckets(episode).length;
@@ -133,6 +237,8 @@
     playBtn.textContent = preview.isPlaying() ? "⏸ Pause" : "▶ Play preview";
     $("restart").disabled = !ready;
     $("mute").disabled = !ready;
+    const exportBtn = $("export");
+    if (exportBtn && !exporting) exportBtn.disabled = !ready;
   }
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);

@@ -10,7 +10,10 @@ import vm from "node:vm";
 
 export function loadPDC(root) {
   globalThis.window = {}; // fresh namespace per load
-  for (const file of ["app/presets.js", "app/episode.js"]) {
+  // export.js only DEFINES functions at load time (no DOM/MediaRecorder access
+  // until a function is called), so the pure buildExportPlan helper is loadable
+  // and unit-testable here. preview.js and ui.js still touch the DOM and are not.
+  for (const file of ["app/presets.js", "app/episode.js", "app/export.js"]) {
     const code = fs.readFileSync(path.join(root, file), "utf8");
     vm.runInThisContext(code, { filename: file });
   }

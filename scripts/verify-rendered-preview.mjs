@@ -170,8 +170,6 @@ const browserExpression = `
     return new File(chunks, name, { type: "video/webm" });
   }
 
-  assert(window.PDC, "PDC namespace should load");
-
   const waitFor = async (fn, label) => {
     for (let i = 0; i < 120; i++) {
       if (fn()) return;
@@ -180,6 +178,9 @@ const browserExpression = `
     throw new Error(label);
   };
 
+  // The classic <script>s may still be loading when this CDP expression first
+  // evaluates; wait for the namespace instead of asserting it synchronously.
+  await waitFor(() => window.PDC, "PDC namespace should load");
   await waitFor(() => window.PDC && window.PDC.episode, "PDC episode API should load");
   await waitFor(() => document.querySelector("#stage-canvas"), "composed preview canvas should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");

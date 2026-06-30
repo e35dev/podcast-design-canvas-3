@@ -81,13 +81,26 @@
           <button id="restart" type="button" disabled>↺ Restart</button>
           <button id="mute" type="button" aria-pressed="false" disabled>🔇 Muted</button>
         </div>
-        <p class="scope-note">Export, audio cleanup, captions, and templates are intentionally out of scope for this step.</p>
+
+        <h2 class="step-title"><span class="num">4</span> Export episode video</h2>
+        <p class="hint">Record the composed preview — your real uploaded footage in the selected preset, with derived speaker names — into a downloadable, playable video file.</p>
+        <div class="transport">
+          <button id="export" type="button" class="primary" disabled>⬇ Export episode video</button>
+        </div>
+        <div class="export-status" id="export-status" role="status" aria-live="polite"></div>
+        <progress id="export-progress" class="export-progress" max="1" value="0" hidden></progress>
+        <div class="export-result" id="export-result" hidden>
+          <p class="export-done">Export complete — your episode video is ready.</p>
+          <a id="export-download" class="export-download" download>Download episode video</a>
+          <video id="export-video" class="export-video" controls playsinline></video>
+        </div>
       </section>
     </main>
 
     <script src="app/presets.js"></script>
     <script src="app/episode.js"></script>
     <script src="app/preview.js"></script>
+    <script src="app/export.js"></script>
     <script src="app/ui.js"></script>
   </body>
 </html>
