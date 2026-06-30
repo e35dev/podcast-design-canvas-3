@@ -29,9 +29,10 @@
     const fps = opts.fps || 30;
     const vids = speakerVideos();
     const longest = vids.reduce((m, v) => (isFinite(v.duration) && v.duration > m ? v.duration : m), 0);
-    // One loop of the longest track, clamped so an hour-plus source still
-    // produces a sensible MVP export rather than recording in real time forever.
-    const recordSeconds = Math.max(1, Math.min(opts.maxSeconds || longest || 3, 30));
+    const requestedSeconds = Number.isFinite(Number(opts.maxSeconds)) ? Number(opts.maxSeconds) : null;
+    // Match the episode length from the uploaded media by default, and allow an
+    // explicit override only when the caller provides one.
+    const recordSeconds = Math.max(1, requestedSeconds != null ? requestedSeconds : (longest || 3));
 
     // Best-effort: mix each speaker's audio into one track.
     let audioTracks = [];
