@@ -1,8 +1,9 @@
 // scripts/verify-social-context.mjs
-// Drives the shipped app in headless Chrome and proves issue #41's full workflow:
-// upload Host + Guest videos, enter distinct social links, confirm derived names
-// in the preview, cycle Split → Stack → Spotlight with nonblank video, and keep
-// uploads + social context intact throughout.
+// Drives the shipped app in headless Chrome and proves issue #63: upload speaker
+// videos, enter distinct social links for Host/Guest 1/Guest 2 through the real
+// setup inputs, confirm derived names appear in the live composed preview (canvas
+// labels + setup hints), survive preset switching, clear/replace per speaker
+// only, and keep export available.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -136,7 +137,7 @@ const browserExpression = `
     recorder.start();
     for (let i = 0; i < 24; i++) {
       ctx.fillStyle = color; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#fff"; ctx.font = "26px sans-serif"; ctx.fillText("frame " + i, 20, 100);
+      ctx.fillStyle = "#fff"; ctx.font = "26px sans-serif"; ctx.fillText(name, 20, 100);
       await sleep(45);
     }
     await new Promise((resolve) => { recorder.onstop = resolve; recorder.stop(); });
@@ -149,11 +150,12 @@ const browserExpression = `
     input.files = dt.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  function typeInto(input, value) {
+  function setLink(bucket, value, eventName) {
+    const input = document.querySelector('[data-link-bucket="' + bucket + '"]');
     input.value = value;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event(eventName || "input", { bubbles: true }));
   }
-  const tagText = (bucket) => {
+  const bucketName = (bucket) => {
     const el = document.querySelector('.bucket[data-bucket="' + bucket + '"] .bucket-name');
     return el ? el.textContent : null;
   };
@@ -186,13 +188,11 @@ const browserExpression = `
     assert(lit >= 5, label + ": composed canvas should show nonblank pixels (" + lit + "%)");
   }
 
-  // Wait for the app's classic scripts to finish wiring the DOM (the page may
-  // still be loading when this evaluates), then assert the controls exist.
   const waitFor = async (fn, label) => {
     for (let i = 0; i < 100; i++) { if (fn()) return; await sleep(50); }
     throw new Error(label);
   };
-  await waitFor(() => window.PDC && window.PDC.episode && window.PDC.episode.setSocialLink, "PDC.episode social API should load");
+  await waitFor(() => window.PDC && window.PDC.episode && window.PDC.episode.speakerLabels, "PDC.episode social API should load");
   await waitFor(() => document.querySelector("#stage-canvas"), "composed preview canvas should exist");
   await waitFor(() => document.querySelector('[data-file-bucket="host"]'), "Host upload control should exist");
   assert(document.querySelector('[data-link-bucket="host"]'), "Host social link input should exist");
@@ -230,13 +230,14 @@ const browserExpression = `
   const playButton = document.querySelector("#play");
   if (!playButton.textContent.includes("Pause")) playButton.click();
   await sleep(700);
-  assertSocialState("split preset with social links");
+
+  assertSocialState(NAMES, "after entering social links");
 
   for (const presetId of ["stack", "spotlight", "split"]) {
     document.querySelector('[data-preset="' + presetId + '"]').click();
     await sleep(500);
     assert(document.querySelector("#stage-canvas").dataset.preset === presetId, "preset should switch to " + presetId);
-    assertSocialState(presetId + " preset with social links");
+    assertSocialState(NAMES, presetId + " preset preserves derived names");
   }
 
   // Replacing one link updates only that speaker's derived name.
@@ -265,7 +266,7 @@ const browserExpression = `
       guest2: document.querySelector('[data-link-bucket="guest2"]').value,
     },
     presetAfter: document.querySelector("#stage-canvas").dataset.preset,
-    videoCount: videos.length,
+    exportEnabled: !document.querySelector("#export").disabled,
   };
 })()
 `;
@@ -299,7 +300,7 @@ async function main() {
       expression: browserExpression,
       awaitPromise: true,
       returnByValue: true,
-      timeout: 30000,
+      timeout: 45000,
     });
     ws.close();
 

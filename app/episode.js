@@ -58,18 +58,35 @@
     if (!s) return "";
     const at = s.match(/^@([A-Za-z0-9_.\-]+)$/);
     if (at) return at[1];
-    s = s.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[?#]/)[0];
+    // Allow a plain handle when the creator skips the full URL.
+    if (/^[A-Za-z0-9_.\-]+$/.test(s)) return s;
+    s = s.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[?#]/)[0].replace(/\/+$/, "");
     const parts = s.split("/").filter(Boolean);
-    const last = parts.length > 1 ? parts[parts.length - 1] : "";
-    const handle = (last || "").replace(/^@/, "");
-    return handle;
+    if (!parts.length) return "";
+    // Walk path segments from the end; skip empty/@-only and generic route words.
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const seg = parts[i].replace(/^@/, "");
+      if (!seg) continue;
+      if (/^(in|user|u|profile|channel|c|people|@)$/i.test(seg)) continue;
+      if (i === 0 && seg.includes(".")) continue; // domain-only remainder
+      return seg;
+    }
+    return "";
   }
 
-  // The name to display for a speaker: derived from their social link when one
-  // is set, otherwise the default bucket label (Host / Guest 1 / Guest 2).
+  // Display name for one speaker bucket (derived link handle or bucket label).
   function speakerName(episode, bucket) {
     const fallback = (PDC.presets.BUCKET_LABELS && PDC.presets.BUCKET_LABELS[bucket]) || bucket;
     return deriveHandle(getSocialLink(episode, bucket)) || fallback;
+  }
+
+  // Map each speaker bucket to the label the preview should show right now.
+  function speakerLabels(episode) {
+    const labels = {};
+    SPEAKER_BUCKETS.forEach(function (bucket) {
+      labels[bucket] = speakerName(episode, bucket);
+    });
+    return labels;
   }
 
   // Buckets that currently hold media, in canonical speaker order.
@@ -112,6 +129,7 @@
     getSocialLink,
     deriveHandle,
     speakerName,
+    speakerLabels,
     canCompose,
     readinessReason,
   };

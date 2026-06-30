@@ -114,6 +114,7 @@
       ctx.fillStyle = "#05070c";
       ctx.fillRect(0, 0, w, h);
 
+      const labels = {};
       buckets.forEach(function (bucket, i) {
         const rect = rects[i] || rects[rects.length - 1];
         const x = (rect.x / 100) * w;
@@ -121,6 +122,8 @@
         const rw = (rect.w / 100) * w;
         const rh = (rect.h / 100) * h;
         const v = videos[bucket];
+        const label = PDC.episode.speakerName(episodeRef, bucket);
+        labels[bucket] = label;
 
         ctx.fillStyle = "#000";
         ctx.fillRect(x, y, rw, rh);
@@ -150,18 +153,22 @@
           ctx.strokeRect(x + 1, y + 1, rw - 2, rh - 2);
         }
 
-        const label = PDC.episode.speakerName(episodeRef, bucket);
         if (label) {
-          ctx.fillStyle = "rgba(8,10,16,0.72)";
-          ctx.fillRect(x + 8, y + rh - 28, Math.min(rw - 16, label.length * 9 + 20), 22);
+          const fontSize = Math.max(11, Math.min(14, Math.round(rh * 0.09)));
+          const padX = Math.max(8, Math.round(rw * 0.03));
+          const barW = Math.min(rw - padX * 2, label.length * (fontSize * 0.62) + 16);
+          const barH = Math.max(18, fontSize + 8);
+          ctx.fillStyle = "rgba(8,10,16,0.78)";
+          ctx.fillRect(x + padX, y + rh - barH - 6, barW, barH);
           ctx.fillStyle = "#fff";
-          ctx.font = "600 14px system-ui, sans-serif";
-          ctx.fillText(label, x + 14, y + rh - 12);
+          ctx.font = "600 " + fontSize + "px system-ui, sans-serif";
+          ctx.fillText(label, x + padX + 6, y + rh - 10);
         }
       });
 
       canvasEl.dataset.preset = preset.id;
       canvasEl.dataset.speakers = String(buckets.length);
+      canvasEl.dataset.speakerLabels = JSON.stringify(labels);
     }
 
     function loop() {
@@ -191,6 +198,7 @@
         ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
         canvasEl.dataset.preset = "";
         canvasEl.dataset.speakers = "0";
+        canvasEl.dataset.speakerLabels = "";
       }
       drawFrame();
       return buckets.length;

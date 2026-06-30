@@ -69,6 +69,17 @@
     input.addEventListener("input", handle);
   });
 
+  function onSocialLinkChange(bucket, value) {
+    setSocialLink(episode, bucket, value);
+    updateBucketRow(bucket);
+    if (canCompose(episode)) {
+      preview.render(episode);
+      preview.drawFrame();
+      if (!preview.isPlaying()) preview.play();
+    }
+    refresh();
+  }
+
   document.querySelectorAll("input[data-link-bucket]").forEach(function (input) {
     const bucket = input.getAttribute("data-link-bucket");
     function handle() {
