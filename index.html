@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Podcast Design Canvas</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="app/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">◆</span>
+        <div>
+          <h1>Podcast Design Canvas</h1>
+          <p class="tagline">
+            Bring your synced speaker videos together into one composed preview.
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <!-- All controls are present on first paint — nothing is gated behind
+           prior state, so the workflow is always reachable. -->
+      <section class="panel" aria-label="Add speaker videos">
+        <h2 class="section-heading">1 · Add your speaker videos</h2>
+        <p class="section-help">
+          For each speaker, upload a local video file or record one live with
+          your camera. Add at least two to build a composed preview.
+        </p>
+        <div class="speakers" id="speakers"></div>
+      </section>
+
+      <section class="panel" aria-label="Choose a preset">
+        <h2 class="section-heading">2 · Choose a preset layout</h2>
+        <p class="section-help">Start from a polished layout — no manual positioning.</p>
+        <div class="presets" id="presets" role="radiogroup" aria-label="Preset layout"></div>
+      </section>
+
+      <section class="panel" aria-label="Composed preview">
+        <div class="preview-head">
+          <h2 class="section-heading">3 · Play the composed preview</h2>
+          <div class="preview-actions">
+            <button id="btn-play" type="button" class="primary" disabled>Play preview</button>
+            <button id="btn-restart" type="button" class="secondary" disabled>Restart</button>
+          </div>
+        </div>
+        <div class="stage">
+          <canvas id="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
+          <div id="stage-empty" class="stage-empty">
+            <p>Add at least two speaker videos, then press <strong>Play preview</strong>.</p>
+          </div>
+        </div>
+        <p id="preview-status" class="status" role="status">
+          Add at least two speaker videos to preview.
+        </p>
+        <p class="scope-note">
+          Rendered export, audio cleanup, captions, and templates are out of scope
+          for this step — this proves your uploaded media composes and plays.
+        </p>
+      </section>
+    </main>
+
+    <!-- Classic scripts only (no ES modules) so the app runs from file://.
+         The pure model loads before the UI wiring. -->
+    <script src="app/model.js"></script>
+    <script src="app/main.js"></script>
+  </body>
+</html>
