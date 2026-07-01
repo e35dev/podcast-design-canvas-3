@@ -23,6 +23,76 @@
     );
   }
 
+  // Each <video> accepts only one createMediaElementSource() for its lifetime.
+  // Re-use a page-lifetime context and one tap per element so repeated exports
+  // keep mixed speaker audio without reloading or re-uploading.
+  let mixCtx = null;
+  const tapsByVideo = new WeakMap();
+
+  async function ensureMixContext() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!mixCtx) mixCtx = new AC();
+    if (mixCtx.state === "suspended") { try { await mixCtx.resume(); } catch (e) {} }
+    return mixCtx;
+  }
+
+  function ensureSpeakerTap(video, ctx) {
+    let tap = tapsByVideo.get(video);
+    if (tap) return tap;
+    try {
+      const source = ctx.createMediaElementSource(video);
+      const gain = ctx.createGain();
+      source.connect(gain);
+      tap = { source, gain };
+      tapsByVideo.set(video, tap);
+      return tap;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // captureStream() is repeatable when an element cannot accept a media source.
+  function captureSpeakerAudio(ctx, video) {
+    const tap = video.captureStream || video.mozCaptureStream;
+    if (!tap) return null;
+    try {
+      const stream = tap.call(video);
+      const tracks = stream.getAudioTracks();
+      if (!tracks.length) return null;
+      return ctx.createMediaStreamSource(new MediaStream(tracks));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function mixSpeakerAudio(vids) {
+    const ctx = await ensureMixContext();
+    if (!ctx || !vids.length) return [];
+    const dest = ctx.createMediaStreamDestination();
+    const gainValue = 1 / Math.max(1, vids.length);
+    let connected = 0;
+    for (const v of vids) {
+      const tap = ensureSpeakerTap(v, ctx);
+      if (tap) {
+        tap.gain.gain.value = gainValue;
+        try { tap.gain.disconnect(); } catch (e) {}
+        tap.gain.connect(dest);
+        connected++;
+        continue;
+      }
+      try {
+        const src = captureSpeakerAudio(ctx, v);
+        if (!src) continue;
+        const gain = ctx.createGain();
+        gain.gain.value = gainValue;
+        src.connect(gain).connect(dest);
+        connected++;
+      } catch (e) { /* speaker has no audio this pass */ }
+    }
+    return connected ? dest.stream.getAudioTracks() : [];
+  }
+
   // Record the live canvas (and mixed speaker audio) into a downloadable Blob.
   async function exportEpisode(canvasEl, opts) {
     opts = opts || {};
@@ -34,28 +104,7 @@
     // opts.maxSeconds is an explicit override only (not a default cap).
     const recordSeconds = Math.max(1, opts.maxSeconds || longest || 3);
 
-    // Best-effort: mix each speaker's audio into one track.
-    let audioTracks = [];
-    let audioCtx = null;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC && vids.length) {
-      try {
-        audioCtx = new AC();
-        if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch (e) {} }
-        const dest = audioCtx.createMediaStreamDestination();
-        let connected = 0;
-        for (const v of vids) {
-          try {
-            const src = audioCtx.createMediaElementSource(v);
-            const gain = audioCtx.createGain();
-            gain.gain.value = 1 / Math.max(1, vids.length);
-            src.connect(gain).connect(dest);
-            connected++;
-          } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
-        }
-        if (connected) audioTracks = dest.stream.getAudioTracks();
-      } catch (e) { audioCtx = null; }
-    }
+    const audioTracks = await mixSpeakerAudio(vids);
 
     const canvasStream = canvasEl.captureStream(fps);
     const combined = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
@@ -78,7 +127,6 @@
     try { recorder.requestData(); } catch (e) {}
     recorder.stop();
     await stopped;
-    if (audioCtx) { try { await audioCtx.close(); } catch (e) {} }
 
     const blob = new Blob(chunks, { type: mimeType.split(";")[0] });
     const url = URL.createObjectURL(blob);

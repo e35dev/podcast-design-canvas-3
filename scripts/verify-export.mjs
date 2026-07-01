@@ -128,29 +128,59 @@ const browserExpression = `
   assert(document.querySelector("#stage-canvas").dataset.preset === "stack", "selected preset should be active before export");
 
   await waitFor(() => !document.querySelector("#export").disabled, "Export action should be enabled after upload + preset");
-  document.querySelector("#export").click();
 
-  // Wait for the real product result (download link + playback element).
-  await waitFor(() => document.querySelector("#export-download") && document.querySelector("#export-playback"), "export should produce a downloadable result", 600);
-  const link = document.querySelector("#export-download");
-  const href = link.getAttribute("href");
-  assert(href && href.indexOf("blob:") === 0, "download link should point at a real blob, not a fake/href-less download");
+  async function blobHasAudio(href) {
+    const resp = await fetch(href);
+    const blob = await resp.blob();
+    const buf = await blob.arrayBuffer();
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      const decoded = await ac.decodeAudioData(buf.slice(0));
+      return decoded.numberOfChannels > 0 && decoded.length > 0;
+    } catch (e) {
+      return false;
+    } finally {
+      try { await ac.close(); } catch (e2) {}
+    }
+  }
 
-  // The exported artifact must be a genuinely playable video with real bytes.
-  const resp = await fetch(href);
-  const blob = await resp.blob();
-  assert(blob.size > 2048, "exported file should carry real bytes, got " + blob.size);
-  const v = document.createElement("video");
-  v.muted = true; v.src = URL.createObjectURL(blob);
-  await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
-  assert(v.videoWidth > 0 && v.videoHeight > 0, "exported file should be a playable video with real dimensions");
+  async function runExport(attempt) {
+    const result = document.querySelector("#export-result");
+    result.hidden = true;
+    result.innerHTML = "";
+    document.querySelector("#export").click();
+    await waitFor(
+      () => document.querySelector("#export-download") && document.querySelector("#export-playback"),
+      "export attempt " + attempt + " should produce a downloadable result",
+      600,
+    );
+    const link = document.querySelector("#export-download");
+    const href = link.getAttribute("href");
+    assert(href && href.indexOf("blob:") === 0, "attempt " + attempt + ": download link should be a real blob URL");
+    const resp = await fetch(href);
+    const blob = await resp.blob();
+    assert(blob.size > 2048, "attempt " + attempt + ": exported file should carry real bytes, got " + blob.size);
+    const vid = document.createElement("video");
+    vid.muted = true;
+    vid.src = URL.createObjectURL(blob);
+    await new Promise((r) => { vid.onloadedmetadata = r; vid.onerror = r; setTimeout(r, 5000); });
+    assert(vid.videoWidth > 0 && vid.videoHeight > 0,
+      "attempt " + attempt + ": exported file should be a playable video with real dimensions");
+    assert(await blobHasAudio(href),
+      "attempt " + attempt + ": exported file must carry a decodable audio track (re-export audio bug)");
+    return { bytes: blob.size, dimensions: vid.videoWidth + "x" + vid.videoHeight, href };
+  }
+
+  const first = await runExport(1);
+  await waitFor(() => !document.querySelector("#export").disabled, "Export button should re-enable after first export");
+  const second = await runExport(2);
+  assert(second.href !== first.href, "second export should produce a distinct blob from the first");
 
   return {
     presetExported: document.querySelector("#stage-canvas").dataset.preset,
-    bytes: blob.size,
-    type: blob.type,
-    dimensions: v.videoWidth + "x" + v.videoHeight,
-    downloadName: link.getAttribute("download"),
+    firstExport: first,
+    secondExport: second,
+    downloadName: document.querySelector("#export-download").getAttribute("download"),
   };
 })()
 `;
@@ -175,7 +205,7 @@ async function main() {
     const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 40000 });
     ws.close();
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
-    console.log("verify-export: OK");
+    console.log("verify-export: OK — both exports carried audio; re-export audio bug is fixed");
     console.log(JSON.stringify(result.result.value, null, 2));
   } finally {
     await stopChrome(child);
