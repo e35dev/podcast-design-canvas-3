@@ -156,8 +156,14 @@
     });
   }
 
+  // The layout that was active before the editor opened. Captured here because
+  // opening the editor immediately publishes a draft layout (via onChange),
+  // overwriting episode.presetId — so Cancel must restore from this snapshot.
+  let layoutBeforeEdit = null;
+
   function openEditor() {
     if (!canCompose(episode)) return;
+    layoutBeforeEdit = episode.presetId;
     const buckets = assignedBuckets(episode);
     const initial = PDC.templates.resolveLayout(episode, buckets.length);
     editor.open(buckets, initial, function (b) { return speakerName(episode, b); });
@@ -178,12 +184,14 @@
 
   $("customize").addEventListener("click", openEditor);
   $("cancel-customize").addEventListener("click", function () {
-    // Revert to the previously selected layout (fall back to the first preset).
-    const prev = PDC.templates.isTemplate(episode.presetId) && episode.presetId !== PDC.templates.DRAFT_ID
-      ? episode.presetId
-      : PRESETS[0].id;
+    // Revert to the layout that was active before the editor opened — a built-in
+    // preset or a previously saved template — never silently snapping to Split.
+    const prev = layoutBeforeEdit;
+    const stillExists = prev && prev !== PDC.templates.DRAFT_ID &&
+      (PDC.presets.getPreset(prev) || PDC.templates.getTemplate(prev));
     closeEditor();
-    applyLayout(prev);
+    applyLayout(stillExists ? prev : PRESETS[0].id);
+    layoutBeforeEdit = null;
   });
   $("save-template").addEventListener("click", function () {
     const name = ($("template-name").value || "").trim() || "Custom layout";

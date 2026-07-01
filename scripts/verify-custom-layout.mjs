@@ -3,8 +3,11 @@
 // upload two speaker videos, open the custom layout editor, RESIZE and DRAG the
 // Host frame with real mouse events, confirm the live preview renders the moved
 // Host video, save the arrangement as a named reusable template, confirm the
-// applied template renders the saved positions, survive a preset round-trip, and
-// export a genuinely playable video while the custom template is selected. Media
+// applied template renders the saved positions, survive a preset round-trip,
+// confirm that opening the editor and clicking Cancel restores the layout that
+// was active before it opened (a preset or a saved template) rather than
+// silently reverting to the first preset, and export a genuinely playable video
+// while the custom template is selected. Media
 // is generated in-browser and the artifact is read from the product's own
 // download link — no fixtures, seeded media, or verifier-only paths. Mirrors the
 // CDP harness used by the other rendered checks.
@@ -204,7 +207,30 @@ const browserExpression = `
   const status = (document.querySelector("#readiness").textContent || "");
   assert(/Corner Host/.test(status), "status should name the active custom template after the round-trip (got: " + status + ")");
 
-  // 6) Export while the custom template is selected => playable video of the saved layout.
+  // 6) Cancel must restore the layout that was active before the editor opened.
+  //    Run this before export so the full check stays within sandbox time limits.
+  document.querySelector('[data-preset="spotlight"]').click();
+  await waitFor(() => canvas.dataset.preset === "spotlight", "spotlight should be active before the cancel check");
+  await waitFor(() => !document.querySelector("#customize").disabled, "customize should enable before the cancel check");
+  document.querySelector("#customize").click();
+  await waitFor(() => !overlay.hidden, "editor should open for the preset cancel check");
+  document.querySelector("#cancel-customize").click();
+  await waitFor(() => canvas.dataset.preset === "spotlight", "Cancel must restore the selected preset, not revert to Split (got " + canvas.dataset.preset + ")");
+  assert(/Spotlight/i.test(document.querySelector("#readiness").textContent || ""), "status should still name Spotlight after Cancel");
+
+  const tplBtnAgain = document.querySelector('#templates [data-layout="' + tplId + '"]');
+  assert(tplBtnAgain, "saved template button should still exist for the cancel check");
+  tplBtnAgain.click();
+  await waitFor(() => canvas.dataset.preset === tplId, "saved template should be active before the template cancel check");
+  await waitFor(() => !document.querySelector("#customize").disabled, "customize should enable for the template cancel check");
+  document.querySelector("#customize").click();
+  await waitFor(() => !overlay.hidden, "editor should open for the template cancel check");
+  document.querySelector("#cancel-customize").click();
+  await waitFor(() => canvas.dataset.preset === tplId, "Cancel must restore the active custom template (got " + canvas.dataset.preset + ")");
+  assert(/Corner Host/.test(document.querySelector("#readiness").textContent || ""), "status should still name the custom template after Cancel");
+  assert(!document.querySelector("#export").disabled, "export should stay enabled after Cancel");
+
+  // 7) Export while the custom template is selected => playable video of the saved layout.
   await waitFor(() => !document.querySelector("#export").disabled, "export should be available with the template selected");
   document.querySelector("#export").click();
   for (let i = 0; i < 700; i++) {
@@ -230,6 +256,8 @@ const browserExpression = `
     exportedDuringTemplate: canvas.dataset.preset === tplId,
     exportBytes: blob.size,
     exportDimensions: v.videoWidth + "x" + v.videoHeight,
+    cancelRestoredPreset: true,
+    cancelRestoredTemplate: true,
   };
 })()
 `;
@@ -251,7 +279,7 @@ async function main() {
     const { ws, ready, send } = connectWebSocket(page.webSocketDebuggerUrl);
     await ready;
     await send("Runtime.enable");
-    const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 40000 });
+    const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 120000 });
     ws.close();
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     console.log("verify-custom-layout: OK");
