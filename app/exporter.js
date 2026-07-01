@@ -46,12 +46,21 @@
         let connected = 0;
         for (const v of vids) {
           try {
-            const src = audioCtx.createMediaElementSource(v);
+            // captureStream() returns a new MediaStream each call, so repeated
+            // exports all get fresh audio taps. createMediaElementSource() could
+            // only be called once per element and threw InvalidStateError on every
+            // subsequent export, leaving connected===0 and the file silent.
+            const tap = v.captureStream || v.mozCaptureStream;
+            if (!tap) throw new Error("captureStream not supported");
+            const vStream = tap.call(v);
+            const audioTracks = vStream.getAudioTracks();
+            if (!audioTracks.length) throw new Error("no audio tracks in stream");
+            const src = audioCtx.createMediaStreamSource(new MediaStream(audioTracks));
             const gain = audioCtx.createGain();
             gain.gain.value = 1 / Math.max(1, vids.length);
             src.connect(gain).connect(dest);
             connected++;
-          } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
+          } catch (e) { /* speaker has no audio or captureStream unavailable; skip */ }
         }
         if (connected) audioTracks = dest.stream.getAudioTracks();
       } catch (e) { audioCtx = null; }
