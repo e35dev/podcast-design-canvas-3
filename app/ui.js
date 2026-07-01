@@ -156,8 +156,13 @@
     });
   }
 
+  // Snapshot the layout active when the editor opens. onChange immediately
+  // publishes tpl-draft, overwriting episode.presetId before Cancel can read it.
+  let layoutBeforeEdit = null;
+
   function openEditor() {
     if (!canCompose(episode)) return;
+    layoutBeforeEdit = episode.presetId;
     const buckets = assignedBuckets(episode);
     const initial = PDC.templates.resolveLayout(episode, buckets.length);
     editor.open(buckets, initial, function (b) { return speakerName(episode, b); });
@@ -178,12 +183,21 @@
 
   $("customize").addEventListener("click", openEditor);
   $("cancel-customize").addEventListener("click", function () {
-    // Revert to the previously selected layout (fall back to the first preset).
-    const prev = PDC.templates.isTemplate(episode.presetId) && episode.presetId !== PDC.templates.DRAFT_ID
-      ? episode.presetId
-      : PRESETS[0].id;
-    closeEditor();
-    applyLayout(prev);
+    const prev = layoutBeforeEdit;
+    const restoreId = prev && prev !== PDC.templates.DRAFT_ID &&
+      (PDC.presets.getPreset(prev) || PDC.templates.getTemplate(prev))
+      ? prev : PRESETS[0].id;
+    layoutBeforeEdit = null;
+    editor.close();
+    setPreset(episode, restoreId);
+    PDC.templates.clearDraft();
+    $("customize-edit").hidden = true;
+    $("customize-hint").hidden = true;
+    $("customize").textContent = "✎ Customize layout";
+    markSelected(restoreId);
+    preview.render(episode);
+    if (canCompose(episode)) preview.play();
+    refresh();
   });
   $("save-template").addEventListener("click", function () {
     const name = ($("template-name").value || "").trim() || "Custom layout";

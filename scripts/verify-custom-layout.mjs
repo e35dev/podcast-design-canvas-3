@@ -204,7 +204,22 @@ const browserExpression = `
   const status = (document.querySelector("#readiness").textContent || "");
   assert(/Corner Host/.test(status), "status should name the active custom template after the round-trip (got: " + status + ")");
 
-  // 6) Export while the custom template is selected => playable video of the saved layout.
+  // 6) Cancel must restore the layout active before the editor opened. Keep this
+  //    before export so the full workflow stays within sandbox time limits.
+  document.querySelector('[data-preset="stack"]').click();
+  await waitFor(() => canvas.dataset.preset === "stack", "stack should be active before cancel check", 400);
+  document.querySelector("#customize").click();
+  await waitFor(() => !overlay.hidden, "editor should open for preset cancel check", 400);
+  document.querySelector("#cancel-customize").click();
+  await waitFor(() => canvas.dataset.preset === "stack", "Cancel must restore stack, not revert to split (got " + canvas.dataset.preset + ")", 400);
+  document.querySelector('#templates [data-layout="' + tplId + '"]').click();
+  await waitFor(() => canvas.dataset.preset === tplId, "template should be active before template cancel check", 400);
+  document.querySelector("#customize").click();
+  await waitFor(() => !overlay.hidden, "editor should open for template cancel check", 400);
+  document.querySelector("#cancel-customize").click();
+  await waitFor(() => canvas.dataset.preset === tplId, "Cancel must restore template (got " + canvas.dataset.preset + ")", 400);
+
+  // 7) Export while the custom template is selected => playable video of the saved layout.
   await waitFor(() => !document.querySelector("#export").disabled, "export should be available with the template selected");
   document.querySelector("#export").click();
   for (let i = 0; i < 700; i++) {
@@ -251,7 +266,7 @@ async function main() {
     const { ws, ready, send } = connectWebSocket(page.webSocketDebuggerUrl);
     await ready;
     await send("Runtime.enable");
-    const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 40000 });
+    const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 120000 });
     ws.close();
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     console.log("verify-custom-layout: OK");
