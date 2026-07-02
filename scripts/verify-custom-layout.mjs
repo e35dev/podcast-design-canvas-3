@@ -1,13 +1,12 @@
 // scripts/verify-custom-layout.mjs
-// Drives the shipped app in headless Chrome and proves the active #66 workflow:
-// upload two speaker videos, open the custom layout editor, RESIZE and DRAG the
-// Host frame with real mouse events, confirm the live preview renders the moved
-// Host video, save the arrangement as a named reusable template, confirm the
-// applied template renders the saved positions, survive a preset round-trip, and
-// export a genuinely playable video while the custom template is selected. Media
-// is generated in-browser and the artifact is read from the product's own
-// download link — no fixtures, seeded media, or verifier-only paths. Mirrors the
-// CDP harness used by the other rendered checks.
+// Drives the shipped app in headless Chrome and proves the custom-layout flow:
+// upload three speaker videos; confirm Cancel from Stack and Spotlight preserves
+// the selected preset, live preview, uploads, and export readiness after unsaved
+// edits; then save a named reusable template, confirm it renders the saved
+// positions, survives a preset round-trip, and exports a genuinely playable
+// video. Media is generated in-browser and the artifact is read from the
+// product's own download link — no fixtures, seeded media, or verifier-only paths.
+// Mirrors the CDP harness used by the other rendered checks.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -115,16 +114,22 @@ const browserExpression = `
 
   await waitFor(() => window.PDC && document.querySelector('[data-file-bucket="host"]') && document.querySelector("#customize"), "shipped controls should exist");
 
-  // Two distinct-colour speakers so we can tell which frame moved where.
+  // Three distinct-colour speakers so the cancel checks can prove Stack rows and
+  // Spotlight guest thumbnails survive the editor exit path.
   uploadTo(document.querySelector('[data-file-bucket="host"]'), await makeVideo("host.webm", "#d11d1d"));
   await sleep(90);
-  uploadTo(document.querySelector('[data-file-bucket="guest1"]'), await makeVideo("guest.webm", "#1d7dd1"));
+  uploadTo(document.querySelector('[data-file-bucket="guest1"]'), await makeVideo("guest1.webm", "#1d7dd1"));
+  await sleep(90);
+  uploadTo(document.querySelector('[data-file-bucket="guest2"]'), await makeVideo("guest2.webm", "#0f8a4b"));
   await sleep(1300);
 
   const canvas = document.querySelector("#stage-canvas");
   const cx = canvas.getContext("2d");
   const overlay = document.querySelector("#edit-overlay");
   const isRed = (p) => p.r > 110 && p.r > p.g + 40 && p.r > p.b + 40;
+  const isBlue = (p) => p.b > 120 && p.b > p.r + 45 && p.b > p.g + 30;
+  const isGreen = (p) => p.g > 85 && p.g > p.r + 30 && p.b > p.r + 25;
+  const exportEnabled = () => !document.querySelector("#export").disabled;
   function avgAtPct(xPct, yPct) {
     const px = Math.round(xPct / 100 * canvas.width), py = Math.round(yPct / 100 * canvas.height);
     const n = 6, d = cx.getImageData(Math.max(0, px - n), Math.max(0, py - n), n * 2, n * 2).data;
@@ -141,9 +146,56 @@ const browserExpression = `
     document.dispatchEvent(new MouseEvent("mouseup", { clientX: toX, clientY: toY, bubbles: true }));
     await sleep(120);
   };
+  const clickFrameN = async (frame, sel, times) => {
+    for (let i = 0; i < times; i++) {
+      frame.querySelector(sel).click();
+      await sleep(40);
+    }
+  };
+
+  async function cancelAfterUnsavedEdit(presetId, assertPresetPixels) {
+    document.querySelector('[data-preset="' + presetId + '"]').click();
+    await sleep(250);
+    assert(canvas.dataset.preset === presetId, presetId + " should be active before customize");
+    assert(exportEnabled(), "export should be enabled before customizing " + presetId);
+    assertPresetPixels("before cancel from " + presetId);
+
+    document.querySelector("#customize").click();
+    await sleep(150);
+    assert(!overlay.hidden, "editor overlay should open from " + presetId);
+    const frame = overlay.querySelector('[data-frame-bucket="host"]');
+    assert(frame, "Host frame should be editable from " + presetId);
+    await clickFrameN(frame, '[data-nudge="host:smaller"]', 2);
+    await clickFrameN(frame, '[data-nudge="host:down"]', 2);
+    assert(canvas.dataset.preset === window.PDC.templates.DRAFT_ID, "unsaved edit should render as a transient draft");
+
+    document.querySelector("#cancel-customize").click();
+    await sleep(300);
+    assert(overlay.hidden, "editor overlay should close after cancel from " + presetId);
+    assert(canvas.dataset.preset === presetId, "cancel should restore " + presetId + " instead of falling back to " + canvas.dataset.preset);
+    assert(document.querySelector('[data-preset="' + presetId + '"]').classList.contains("selected"), presetId + " button should stay selected after cancel");
+    assert(exportEnabled(), "export should stay enabled after cancel from " + presetId);
+    assert(document.querySelectorAll('#templates [data-layout]').length === 0, "cancel should not save a custom template");
+    assertPresetPixels("after cancel from " + presetId);
+    return document.querySelector("#readiness").textContent || "";
+  }
+
+  const stackStatus = await cancelAfterUnsavedEdit("stack", (label) => {
+    assert(isRed(avgAtPct(50, 16)), label + ": Stack Host row should remain visible");
+    assert(isBlue(avgAtPct(50, 50)), label + ": Stack Guest 1 row should remain visible");
+    assert(isGreen(avgAtPct(50, 84)), label + ": Stack Guest 2 row should remain visible");
+  });
+  assert(/Stack/.test(stackStatus), "readiness should still name Stack after cancel (got: " + stackStatus + ")");
+
+  const spotlightStatus = await cancelAfterUnsavedEdit("spotlight", (label) => {
+    assert(isRed(avgAtPct(35, 50)), label + ": Spotlight Host should remain dominant");
+    assert(isBlue(avgAtPct(84, 84)), label + ": Spotlight Guest 1 thumbnail should remain visible");
+    assert(isGreen(avgAtPct(84, 55)), label + ": Spotlight Guest 2 thumbnail should remain visible");
+  });
+  assert(/Spotlight/.test(spotlightStatus), "readiness should still name Spotlight after cancel (got: " + spotlightStatus + ")");
 
   // 1) Open the custom layout editor.
-  await waitFor(() => !document.querySelector("#customize").disabled, "Customize should enable after two uploads");
+  await waitFor(() => !document.querySelector("#customize").disabled, "Customize should enable after uploads");
   document.querySelector("#customize").click();
   await sleep(150);
   assert(!overlay.hidden, "editor overlay should be visible after opening customize");
@@ -154,10 +206,9 @@ const browserExpression = `
 
   // 2) CLICK-BASED resize/position (the path a generic probe can drive without a
   //    freeform drag gesture): shrink + move the Host frame via its buttons.
-  const clickN = async (sel, times) => { for (let i = 0; i < times; i++) { hostFrame.querySelector(sel).click(); await sleep(40); } };
   const wBeforeBtns = parseFloat(hostFrame.style.width);
-  await clickN('[data-nudge="host:smaller"]', 4);
-  await clickN('[data-nudge="host:down"]', 4);
+  await clickFrameN(hostFrame, '[data-nudge="host:smaller"]', 4);
+  await clickFrameN(hostFrame, '[data-nudge="host:down"]', 4);
   const wAfterBtns = parseFloat(hostFrame.style.width), yAfterBtns = parseFloat(hostFrame.style.top);
   assert(wAfterBtns < wBeforeBtns - 5, "the smaller button should shrink the Host frame (" + wBeforeBtns + "->" + wAfterBtns + ")");
   assert(yAfterBtns > 10, "the down button should move the Host frame downward (top=" + yAfterBtns + "%)");
@@ -226,6 +277,7 @@ const browserExpression = `
   return {
     templateId: tplId,
     templateName: tplBtn.textContent,
+    cancelPreserved: { stack: stackStatus, spotlight: spotlightStatus },
     hostSaved: { left: movedX, top: movedY, width: parseFloat(hostFrame.style.width) },
     exportedDuringTemplate: canvas.dataset.preset === tplId,
     exportBytes: blob.size,

@@ -110,6 +110,7 @@
       preview.render(episode);
     },
   });
+  let layoutBeforeEdit = null;
 
   // The id + display name of the currently selected layout (preset or template).
   function currentLayout() {
@@ -158,6 +159,7 @@
 
   function openEditor() {
     if (!canCompose(episode)) return;
+    layoutBeforeEdit = episode.presetId;
     const buckets = assignedBuckets(episode);
     const initial = PDC.templates.resolveLayout(episode, buckets.length);
     editor.open(buckets, initial, function (b) { return speakerName(episode, b); });
@@ -170,6 +172,7 @@
   function closeEditor() {
     editor.close();
     PDC.templates.clearDraft();
+    layoutBeforeEdit = null;
     $("customize-edit").hidden = true;
     $("customize-hint").hidden = true;
     $("customize").textContent = "✎ Customize layout";
@@ -178,10 +181,7 @@
 
   $("customize").addEventListener("click", openEditor);
   $("cancel-customize").addEventListener("click", function () {
-    // Revert to the previously selected layout (fall back to the first preset).
-    const prev = PDC.templates.isTemplate(episode.presetId) && episode.presetId !== PDC.templates.DRAFT_ID
-      ? episode.presetId
-      : PRESETS[0].id;
+    const prev = layoutBeforeEdit || PRESETS[0].id;
     closeEditor();
     applyLayout(prev);
   });
