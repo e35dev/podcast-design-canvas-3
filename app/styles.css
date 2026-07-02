@@ -69,6 +69,26 @@ body {
 }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
 
+/* Episode actions --------------------------------------------------------- */
+.episode-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 14px;
+}
+.secondary {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.secondary:hover { border-color: var(--muted); }
+
 /* Uploader ---------------------------------------------------------------- */
 .uploader {
   display: flex;

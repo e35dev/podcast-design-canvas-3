@@ -59,6 +59,29 @@
     afterMediaChange();
   }
 
+  function resetEpisode() {
+    // Clear media + links + moments; keep templates in PDC.templates storage.
+    SPEAKER_BUCKETS.forEach(function (bucket) {
+      clearMedia(episode, bucket);
+      preview.clear(bucket);
+      const link = document.querySelector('[data-link-bucket="' + bucket + '"]');
+      if (link) link.value = "";
+    });
+    // Clear moments attached to this episode only.
+    if (episode.moments) episode.moments.length = 0;
+    if (episode.socialLinks) episode.socialLinks = {};
+    // Reset to default preset (creator can re-select a saved template).
+    setPreset(episode, PDC.presets.DEFAULT_PRESET_ID);
+    // UI updates.
+    SPEAKER_BUCKETS.forEach(updateBucketRow);
+    if (typeof renderMomentList === "function") renderMomentList();
+    renderTemplates();
+    preview.render(episode);
+    refresh();
+  }
+
+  $("new-episode").addEventListener("click", resetEpisode);
+
   document.querySelectorAll("input[data-file-bucket]").forEach(function (input) {
     const bucket = input.getAttribute("data-file-bucket");
     function handle() {

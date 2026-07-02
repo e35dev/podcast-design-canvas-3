@@ -8,6 +8,7 @@
     { "name": "rendered-social", "run": "CHROME_BIN=\"${CHROME_BIN:-$(find /ms-playwright -maxdepth 3 -type f -name chrome -path '*chrome-linux*' 2>/dev/null | head -n1)}\" node scripts/verify-social-context.mjs" },
     { "name": "rendered-export", "run": "CHROME_BIN=\"${CHROME_BIN:-$(find /ms-playwright -maxdepth 3 -type f -name chrome -path '*chrome-linux*' 2>/dev/null | head -n1)}\" node scripts/verify-export.mjs" },
     { "name": "rendered-custom-layout", "run": "CHROME_BIN=\"${CHROME_BIN:-$(find /ms-playwright -maxdepth 3 -type f -name chrome -path '*chrome-linux*' 2>/dev/null | head -n1)}\" node scripts/verify-custom-layout.mjs" },
-    { "name": "visual-moments", "run": "CHROME_BIN=\"${CHROME_BIN:-$(find /ms-playwright -maxdepth 3 -type f -name chrome -path '*chrome-linux*' 2>/dev/null | head -n1)}\" node scripts/verify-visual-moments.mjs" }
+    { "name": "visual-moments", "run": "CHROME_BIN=\"${CHROME_BIN:-$(find /ms-playwright -maxdepth 3 -type f -name chrome -path '*chrome-linux*' 2>/dev/null | head -n1)}\" node scripts/verify-visual-moments.mjs" },
+    { "name": "show-templates", "run": "CHROME_BIN=\"${CHROME_BIN:-$(find /ms-playwright -maxdepth 3 -type f -name chrome -path '*chrome-linux*' 2>/dev/null | head -n1)}\" node scripts/verify-show-templates.mjs" }
   ]
 }

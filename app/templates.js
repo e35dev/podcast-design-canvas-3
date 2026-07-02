@@ -12,9 +12,55 @@
   const DRAFT_ID = "tpl-draft"; // transient layout shown live while the editor is open
   let draft = null;
 
+  const STORAGE_KEY = "pdc.showTemplates.v1";
+
   const isTemplate = (id) => typeof id === "string" && id.indexOf("tpl-") === 0;
   const getTemplate = (id) => (id === DRAFT_ID ? draft : templates.find((t) => t.id === id) || null);
   const listTemplates = () => templates.slice();
+
+  function loadFromStorage() {
+    try {
+      if (!window.localStorage) return false;
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      const items = Array.isArray(parsed && parsed.templates) ? parsed.templates : [];
+      templates.length = 0;
+      items.forEach(function (t) {
+        if (!t || typeof t !== "object") return;
+        if (!isTemplate(t.id)) return;
+        const rects = {};
+        Object.keys(t.rects || {}).forEach(function (bucket) {
+          rects[bucket] = normalizeRect(t.rects[bucket]);
+        });
+        templates.push({ id: t.id, name: String(t.name || "Template").trim() || "Template", rects });
+      });
+      seq = Number(parsed && parsed.seq) || templates.reduce((m, t) => {
+        const n = Number(String(t.id).replace(/^tpl-/, ""));
+        return Number.isFinite(n) ? Math.max(m, n) : m;
+      }, 0);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function saveToStorage() {
+    try {
+      if (!window.localStorage) return false;
+      const payload = {
+        v: 1,
+        seq,
+        templates: templates.map(function (t) {
+          return { id: t.id, name: t.name, rects: t.rects };
+        }),
+      };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   function setDraft(rects) {
     draft = { id: DRAFT_ID, name: "Custom (editing)", rects: {} };
@@ -49,6 +95,7 @@
     const trimmed = String(name == null ? "" : name).trim();
     const template = { id, name: trimmed || "Custom " + seq, rects: clean };
     templates.push(template);
+    saveToStorage();
     return template;
   }
 
@@ -68,5 +115,22 @@
     return preset.layout(n);
   }
 
-  PDC.templates = { isTemplate, getTemplate, listTemplates, saveTemplate, resolveLayout, normalizeRect, setDraft, clearDraft, DRAFT_ID };
+  // Load any persisted templates immediately on module load (best-effort).
+  loadFromStorage();
+
+  PDC.templates = {
+    isTemplate,
+    getTemplate,
+    listTemplates,
+    saveTemplate,
+    resolveLayout,
+    normalizeRect,
+    setDraft,
+    clearDraft,
+    DRAFT_ID,
+    // Explicit hooks for verifiers/tests and future UX.
+    _storageKey: STORAGE_KEY,
+    loadFromStorage,
+    saveToStorage,
+  };
 })();
