@@ -153,3 +153,41 @@ test("audio quality survives preset switches and media updates", () => {
     noiseReduction: "strong",
   });
 });
+
+test("visual moments can be added, edited, removed, and queried by playback time", () => {
+  const ep = E.createEpisode({});
+  const title = E.addVisualMoment(ep, { type: "title", text: "Episode Intro", start: 0, end: 3 });
+  const callout = E.addVisualMoment(ep, { type: "callout", text: "Sponsor mention", start: 4, end: 7 });
+  assert.ok(title && title.id > 0);
+  assert.ok(callout && callout.id > title.id);
+  assert.equal(E.listVisualMoments(ep).length, 2);
+
+  const edited = E.updateVisualMoment(ep, callout.id, { text: "Important citation", start: 4.5, end: 7.2 });
+  assert.equal(edited.text, "Important citation");
+  assert.equal(edited.start, 4.5);
+  assert.equal(edited.end, 7.2);
+
+  assert.deepEqual(
+    E.activeVisualMomentsAt(ep, 1).map((it) => it.text),
+    ["Episode Intro"],
+  );
+  assert.deepEqual(
+    E.activeVisualMomentsAt(ep, 5).map((it) => it.text),
+    ["Important citation"],
+  );
+  assert.deepEqual(E.activeVisualMomentsAt(ep, 8), []);
+
+  assert.equal(E.removeVisualMoment(ep, title.id), true);
+  assert.equal(E.listVisualMoments(ep).length, 1);
+});
+
+test("invalid visual moments are rejected and do not alter state", () => {
+  const ep = E.createEpisode({});
+  assert.equal(E.addVisualMoment(ep, { type: "banner", text: "bad", start: 0, end: 2 }), null);
+  assert.equal(E.addVisualMoment(ep, { type: "title", text: "", start: 0, end: 2 }), null);
+  assert.equal(E.addVisualMoment(ep, { type: "title", text: "bad range", start: 2, end: 2 }), null);
+  const good = E.addVisualMoment(ep, { type: "callout", text: "ok", start: 1, end: 2 });
+  assert.ok(good);
+  assert.equal(E.updateVisualMoment(ep, good.id, { end: 1 }), null, "invalid edit rejected");
+  assert.equal(E.listVisualMoments(ep).length, 1);
+});
