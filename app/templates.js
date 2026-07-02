@@ -2,11 +2,20 @@
 // named set of per-speaker rects (percent of the stage). Custom templates flow
 // through the SAME render path as the built-in presets: resolveLayout() returns
 // the rects the preview/export already consume, so a saved layout drives the
-// live preview and the exported video with no separate code path. Pure data +
-// string work, DOM-free, classic script on window.PDC.templates.
+// live preview and the exported video with no separate code path.
+//
+// Saved templates persist to localStorage (pdc3.templates.v1) so a creator can
+// refresh or start a fresh episode and reuse a named show template with brand
+// new uploads. Persisted entries carry ONLY layout data ({ id, name, rects });
+// media descriptors, object URLs, and episode state are never serialized, so a
+// template can never drag the old episode's uploads into a new one. When
+// storage is unavailable (sandboxed/private contexts) templates simply stay
+// in-memory for the session. Pure data + string work, DOM-free, classic script
+// on window.PDC.templates.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
 
+  const STORE_KEY = "pdc3.templates.v1";
   const templates = [];
   let seq = 0;
   const DRAFT_ID = "tpl-draft"; // transient layout shown live while the editor is open
@@ -39,6 +48,76 @@
     return { x, y, w, h };
   }
 
+  // --- persistence -----------------------------------------------------------
+  // The exact serialized shape: id + name + per-bucket {x,y,w,h}. Nothing else
+  // (no media, file names, blob/object URLs, or episode fields) ever reaches
+  // storage — building the payload field-by-field enforces that structurally.
+  function serializeTemplate(t) {
+    const rects = {};
+    Object.keys(t.rects).forEach((bucket) => {
+      const r = t.rects[bucket];
+      rects[bucket] = { x: r.x, y: r.y, w: r.w, h: r.h };
+    });
+    return { id: t.id, name: t.name, rects };
+  }
+
+  // Rebuild a trustworthy template from a stored entry; anything malformed,
+  // draft-shaped, media-carrying, or without a usable rect is dropped/stripped.
+  function sanitizeStored(entry) {
+    if (!entry || typeof entry !== "object") return null;
+    if (typeof entry.id !== "string" || entry.id.indexOf("tpl-") !== 0 || entry.id === DRAFT_ID) return null;
+    const src = entry.rects && typeof entry.rects === "object" ? entry.rects : {};
+    const rects = {};
+    PDC.presets.SPEAKER_BUCKETS.forEach((bucket) => {
+      if (src[bucket] && typeof src[bucket] === "object") rects[bucket] = normalizeRect(src[bucket]);
+    });
+    if (!Object.keys(rects).length) return null;
+    const name = String(entry.name == null ? "" : entry.name).trim();
+    return { id: entry.id, name: name || entry.id, rects };
+  }
+
+  // localStorage can throw on ACCESS (sandboxed documents) and on use (private
+  // mode quotas); every touch is guarded so templates fall back to in-memory
+  // and the app never breaks.
+  function storageArea() {
+    try {
+      return window.localStorage || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function loadStored() {
+    try {
+      const area = storageArea();
+      const raw = area && area.getItem(STORE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(sanitizeStored).filter(Boolean);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function persist() {
+    try {
+      const area = storageArea();
+      if (area) area.setItem(STORE_KEY, JSON.stringify(templates.map(serializeTemplate)));
+    } catch (e) {
+      /* storage unavailable — keep this session's templates in-memory */
+    }
+  }
+
+  // Load previously saved show templates on startup, and continue id numbering
+  // after the highest persisted id so new saves never collide with loaded ones.
+  loadStored().forEach((t) => templates.push(t));
+  seq = templates.reduce((max, t) => {
+    const n = parseInt(t.id.slice(4), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
+  // ---------------------------------------------------------------------------
+
   // Persist a layout as a named, reusable template; returns the stored template.
   function saveTemplate(name, rects) {
     const id = "tpl-" + ++seq;
@@ -49,6 +128,7 @@
     const trimmed = String(name == null ? "" : name).trim();
     const template = { id, name: trimmed || "Custom " + seq, rects: clean };
     templates.push(template);
+    persist();
     return template;
   }
 
@@ -68,5 +148,5 @@
     return preset.layout(n);
   }
 
-  PDC.templates = { isTemplate, getTemplate, listTemplates, saveTemplate, resolveLayout, normalizeRect, setDraft, clearDraft, DRAFT_ID };
+  PDC.templates = { isTemplate, getTemplate, listTemplates, saveTemplate, resolveLayout, normalizeRect, setDraft, clearDraft, DRAFT_ID, STORE_KEY };
 })();
