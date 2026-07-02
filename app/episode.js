@@ -7,6 +7,12 @@
   const PDC = (window.PDC = window.PDC || {});
   const { SPEAKER_BUCKETS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
 
+  // Creator-facing audio quality choices, stored WITH the episode so they
+  // survive preset/template switches and repeated exports in the same session.
+  // Leveling defaults ON (balanced speaker volumes is the sensible creator
+  // default); clarity and noise reduction are opt-in.
+  const AUDIO_SETTING_DEFAULTS = { leveling: true, clarity: "off", noiseReduction: "off" };
+
   function createEpisode(init) {
     return {
       title: (init && init.title) || "Untitled episode",
@@ -17,6 +23,7 @@
       // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
       presetId: DEFAULT_PRESET_ID,
+      audioSettings: Object.assign({}, AUDIO_SETTING_DEFAULTS),
     };
   }
 
@@ -72,6 +79,26 @@
     return deriveHandle(getSocialLink(episode, bucket)) || fallback;
   }
 
+  // The episode's audio quality choices, backfilling defaults for episodes
+  // created before the field existed so callers can always read a full object.
+  function getAudioSettings(episode) {
+    if (!episode.audioSettings) episode.audioSettings = Object.assign({}, AUDIO_SETTING_DEFAULTS);
+    return episode.audioSettings;
+  }
+
+  // Store one audio quality choice. Values are validated per key (leveling is a
+  // boolean; clarity/noiseReduction are "on"/"off") so a stray control can't
+  // corrupt state; unknown keys and invalid values are ignored.
+  function setAudioSetting(episode, key, value) {
+    const settings = getAudioSettings(episode);
+    if (key === "leveling") {
+      if (typeof value === "boolean") settings.leveling = value;
+    } else if (key === "clarity" || key === "noiseReduction") {
+      if (value === "on" || value === "off") settings[key] = value;
+    }
+    return episode;
+  }
+
   // Buckets that currently hold media, in canonical speaker order.
   function assignedBuckets(episode) {
     return SPEAKER_BUCKETS.filter((b) => episode.media[b]);
@@ -110,7 +137,10 @@
 
   PDC.episode = {
     MIN_SPEAKERS,
+    AUDIO_SETTING_DEFAULTS,
     createEpisode,
+    getAudioSettings,
+    setAudioSetting,
     assignMedia,
     clearMedia,
     assignedBuckets,

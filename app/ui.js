@@ -2,7 +2,7 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason } = PDC.episode;
+  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason, getAudioSettings, setAudioSetting } = PDC.episode;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -48,6 +48,9 @@
     if (!isVideoFile(file)) return false;
     assignMedia(episode, bucket, { name: file.name, size: file.size, type: file.type || "video/*" });
     preview.setSource(bucket, file);
+    // Keep the original bytes available so export leveling can measure this
+    // speaker's real loudness deterministically (no re-upload ever needed).
+    PDC.exporter.registerSpeakerFile(bucket, file);
     updateBucketRow(bucket);
     return true;
   }
@@ -82,6 +85,47 @@
     }
     ["input", "change"].forEach(function (evt) {
       input.addEventListener(evt, handle);
+    });
+  });
+
+  // Audio quality controls — creator-facing choices stored on the episode, so
+  // they survive preset/template switches and repeated exports (nothing here is
+  // touched by applyLayout). Each toggle updates the model, its own On/Off
+  // badge, and a visible status line describing what the export will do.
+  function audioSummary() {
+    const s = getAudioSettings(episode);
+    return (
+      "Audio for export: " +
+      (s.leveling ? "speaker volumes balanced" : "original speaker volumes") +
+      " · voice clarity " + s.clarity +
+      " · noise reduction " + s.noiseReduction + "."
+    );
+  }
+
+  function updateAudioControls() {
+    const s = getAudioSettings(episode);
+    const states = { leveling: s.leveling, clarity: s.clarity === "on", noiseReduction: s.noiseReduction === "on" };
+    [["audio-leveling", "leveling"], ["audio-clarity", "clarity"], ["audio-noise", "noiseReduction"]].forEach(function (pair) {
+      const btn = $(pair[0]);
+      if (!btn) return;
+      const on = states[pair[1]];
+      btn.setAttribute("aria-pressed", String(on));
+      btn.classList.toggle("on", on);
+      const badge = btn.querySelector("[data-audio-state]");
+      if (badge) badge.textContent = on ? "On" : "Off";
+    });
+    const status = $("audio-status");
+    if (status) status.textContent = audioSummary();
+  }
+
+  [["audio-leveling", "leveling"], ["audio-clarity", "clarity"], ["audio-noise", "noiseReduction"]].forEach(function (pair) {
+    const btn = $(pair[0]);
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      const s = getAudioSettings(episode);
+      if (pair[1] === "leveling") setAudioSetting(episode, "leveling", !s.leveling);
+      else setAudioSetting(episode, pair[1], s[pair[1]] === "on" ? "off" : "on");
+      updateAudioControls();
     });
   });
 
@@ -220,6 +264,7 @@
     try {
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
+        audioSettings: getAudioSettings(episode),
         onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
       const layout = currentLayout();
@@ -230,7 +275,10 @@
       result.innerHTML =
         "Exported <strong>" + fname + "</strong> — " + Math.round(out.bytes / 1024) + " KB, " +
         "“" + layout.name + "” layout. " +
-        '<a id="export-download" href="' + out.url + '" download="' + fname + '">Download again</a>';
+        '<a id="export-download" href="' + out.url + '" download="' + fname + '">Download again</a>' +
+        '<span class="export-audio" id="export-audio"></span>';
+      // The audio settings this export actually applied, visible with the artifact.
+      $("export-audio").textContent = audioSummary();
       // A real playable preview of the exported file (also lets review confirm playback).
       const v = document.createElement("video");
       v.id = "export-playback";
@@ -269,5 +317,6 @@
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   renderTemplates();
+  updateAudioControls();
   refresh();
 })();

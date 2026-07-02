@@ -11,6 +11,7 @@
     "preview-build": "node scripts/preview-build.mjs",
     "verify:rendered": "node scripts/verify-rendered-preview.mjs",
     "verify:social": "node scripts/verify-social-context.mjs",
+    "verify:audio-quality": "node scripts/verify-audio-quality.mjs",
     "serve": "node scripts/serve.mjs"
   }
 }

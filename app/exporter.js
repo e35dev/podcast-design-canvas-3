@@ -40,6 +40,40 @@
     return mixCtx;
   }
 
+  // bucket -> original uploaded File. Leveling measures loudness from these
+  // ORIGINAL bytes (arrayBuffer -> decodeAudioData -> sample RMS), which is
+  // deterministic and independent of realtime playback state — the same upload
+  // always measures the same, however many exports or preset switches happen.
+  const speakerFiles = {};
+  const fileRmsCache = new WeakMap(); // File -> Promise<number>, decode once per upload
+
+  function registerSpeakerFile(bucket, file) {
+    speakerFiles[bucket] = file;
+  }
+
+  function measureFileRms(file, ctx) {
+    let cached = fileRmsCache.get(file);
+    if (cached) return cached;
+    cached = (async function () {
+      const buf = await file.arrayBuffer();
+      const decoded = await ctx.decodeAudioData(buf);
+      let sum = 0;
+      let count = 0;
+      // The whole clip up to 30s per channel is plenty to characterize loudness.
+      const limit = Math.min(decoded.length, decoded.sampleRate * 30);
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        const data = decoded.getChannelData(ch);
+        for (let i = 0; i < limit; i++) sum += data[i] * data[i];
+        count += limit;
+      }
+      return count ? Math.sqrt(sum / count) : 0;
+    })().catch(function () {
+      return 0; // undecodable audio measures as silent -> leveling leaves it at gain 1
+    });
+    fileRmsCache.set(file, cached);
+    return cached;
+  }
+
   // Cached {source, gain} tap for a video, created once. We tap the decoded element
   // audio via createMediaElementSource (repeatable-safe because it is cached, not
   // re-created per export). A muted element feeds silence into the tap, so the
@@ -60,33 +94,88 @@
   }
 
   // Mix every speaker's audio into one fresh track set for this export, reusing
-  // each element's cached tap and rewiring its gain to this export's destination.
-  async function mixSpeakerAudio(vids) {
+  // each element's cached tap and rewiring it to this export's destination
+  // through the episode's audio quality settings: per-speaker LEVELING gains
+  // (measured from the original uploaded bytes) plus optional clarity /
+  // noise-reduction filters. The settings live on the episode, so the graph is
+  // re-applied from them on EVERY export — preset switches and repeated exports
+  // keep the same choices without re-uploading.
+  async function mixSpeakerAudio(vids, settings) {
+    settings = settings || {};
+    const none = { tracks: [], connectedCount: 0, applied: null, cleanup: function () {} };
     const ctx = await ensureMixContext();
-    if (!ctx || !vids.length) return { tracks: [], connectedCount: 0, cleanup: function () {} };
+    if (!ctx || !vids.length) return none;
+
+    const levelingOn = settings.leveling === true;
+    let levelGains = {};
+    if (levelingOn && PDC.audio) {
+      const rmsByBucket = {};
+      for (const v of vids) {
+        const bucket = v.dataset.speaker;
+        const file = speakerFiles[bucket];
+        rmsByBucket[bucket] = file ? await measureFileRms(file, ctx) : 0;
+      }
+      levelGains = PDC.audio.computeLevelingGains(rmsByBucket);
+    }
+
     const dest = ctx.createMediaStreamDestination();
-    const gainValue = 1 / Math.max(1, vids.length);
+    const share = 1 / Math.max(1, vids.length);
     let connected = 0;
     const connectedTaps = [];
+    const filterNodes = [];
     for (const v of vids) {
       const tap = tapSpeaker(v, ctx);
       if (!tap) continue;
-      tap.gain.gain.value = gainValue;
+      const bucket = v.dataset.speaker;
+      const level = levelingOn && levelGains[bucket] ? levelGains[bucket] : 1;
+      tap.gain.gain.value = share * level;
       try { tap.gain.disconnect(); } catch (e) {}
-      tap.gain.connect(dest);
+      let node = tap.gain;
+      if (settings.noiseReduction === "on" && PDC.audio) {
+        const spec = PDC.audio.NOISE_FILTER;
+        const hp = ctx.createBiquadFilter();
+        hp.type = spec.type;
+        hp.frequency.value = spec.frequency;
+        node.connect(hp);
+        filterNodes.push(hp);
+        node = hp;
+      }
+      if (settings.clarity === "on" && PDC.audio) {
+        const spec = PDC.audio.CLARITY_FILTER;
+        const peak = ctx.createBiquadFilter();
+        peak.type = spec.type;
+        peak.frequency.value = spec.frequency;
+        peak.Q.value = spec.q;
+        peak.gain.value = spec.gainDb;
+        node.connect(peak);
+        filterNodes.push(peak);
+        node = peak;
+      }
+      node.connect(dest);
       connectedTaps.push(tap);
       connected++;
     }
     if (!connected) {
       dest.stream.getTracks().forEach(function (track) { track.stop(); });
-      return { tracks: [], connectedCount: 0, cleanup: function () {} };
+      return none;
     }
     return {
       tracks: dest.stream.getAudioTracks(),
       connectedCount: connected,
+      // What this export's audio graph actually applied — surfaced on the
+      // export result so the selected settings are visible with the artifact.
+      applied: {
+        leveling: levelingOn,
+        levelingGains: levelGains,
+        clarity: settings.clarity === "on" ? "on" : "off",
+        noiseReduction: settings.noiseReduction === "on" ? "on" : "off",
+      },
       cleanup: function () {
         connectedTaps.forEach(function (tap) {
           try { tap.gain.disconnect(); } catch (e) {}
+        });
+        filterNodes.forEach(function (nodeToDrop) {
+          try { nodeToDrop.disconnect(); } catch (e) {}
         });
         dest.stream.getTracks().forEach(function (track) { track.stop(); });
       },
@@ -104,9 +193,10 @@
     // opts.maxSeconds is an explicit override only (not a default cap).
     const recordSeconds = Math.max(1, opts.maxSeconds || longest || 3);
 
-    // Mix each speaker's audio into one track. The tap is created once per element
+    // Mix each speaker's audio into one track, shaped by the episode's audio
+    // quality settings (opts.audioSettings). The tap is created once per element
     // and reused, so a second export in the same session still carries audio.
-    const mixedAudio = await mixSpeakerAudio(vids);
+    const mixedAudio = await mixSpeakerAudio(vids, opts.audioSettings);
     const audioTracks = mixedAudio.tracks;
     if (vids.length && (!audioTracks.length || mixedAudio.connectedCount !== vids.length)) {
       mixedAudio.cleanup();
@@ -152,7 +242,7 @@
 
       const blob = new Blob(chunks, { type: mimeType.split(";")[0] });
       const url = URL.createObjectURL(blob);
-      return { blob, url, bytes: blob.size, mimeType, seconds: recordSeconds };
+      return { blob, url, bytes: blob.size, mimeType, seconds: recordSeconds, audio: mixedAudio.applied };
     } finally {
       // Restore each speaker's prior muted state even if recording fails.
       for (const [v, wasMuted] of restoreMuted) { v.muted = wasMuted; }
@@ -174,5 +264,5 @@
     a.remove();
   }
 
-  PDC.exporter = { exportEpisode, download, pickMimeType };
+  PDC.exporter = { exportEpisode, download, pickMimeType, registerSpeakerFile };
 })();

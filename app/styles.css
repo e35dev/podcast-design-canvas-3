@@ -179,6 +179,35 @@ body {
 .preset strong { font-size: 14px; }
 .preset span { color: var(--muted); font-size: 12px; }
 
+/* Audio quality ------------------------------------------------------------ */
+.audio-quality { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 520px) { .audio-quality { grid-template-columns: 1fr; } }
+.audio-toggle {
+  position: relative;
+  text-align: left;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.05s;
+}
+.audio-toggle:hover { border-color: var(--muted); }
+.audio-toggle.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.audio-toggle strong { font-size: 14px; padding-right: 34px; }
+.audio-toggle span { color: var(--muted); font-size: 12px; }
+.audio-toggle .audio-state {
+  position: absolute; top: 10px; right: 10px;
+  font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--line); color: var(--ink);
+}
+.audio-toggle.on .audio-state { background: var(--accent); color: #fff; }
+.audio-status { margin: 10px 0 0; color: var(--ok); font-size: 13px; min-height: 16px; }
+.export-audio { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+
 .readiness { margin-top: 14px; color: var(--muted); font-size: 13px; min-height: 18px; }
 
 /* Stage / composed preview ------------------------------------------------ */

@@ -66,11 +66,32 @@
         <div class="presets" id="presets" role="group" aria-label="Preset layouts"></div>
         <div class="templates" id="templates" role="group" aria-label="Saved custom layouts"></div>
 
+        <h2 class="step-title"><span class="num">3</span> Audio quality</h2>
+        <p class="hint">Simple choices for how the episode should sound. They stay with the episode and are applied when you export.</p>
+        <div class="audio-quality" id="audio-quality" role="group" aria-label="Audio quality">
+          <button id="audio-leveling" type="button" class="audio-toggle" aria-pressed="true">
+            <strong>Balance speaker volumes</strong>
+            <span>Bring quiet and loud speakers to a similar level</span>
+            <span class="audio-state" data-audio-state="leveling">On</span>
+          </button>
+          <button id="audio-clarity" type="button" class="audio-toggle" aria-pressed="false">
+            <strong>Voice clarity</strong>
+            <span>Make speech a little crisper and easier to follow</span>
+            <span class="audio-state" data-audio-state="clarity">Off</span>
+          </button>
+          <button id="audio-noise" type="button" class="audio-toggle" aria-pressed="false">
+            <strong>Reduce background noise</strong>
+            <span>Cut low rumble and hum behind the voices</span>
+            <span class="audio-state" data-audio-state="noiseReduction">Off</span>
+          </button>
+        </div>
+        <p class="audio-status" id="audio-status" role="status"></p>
+
         <p class="readiness" id="readiness" role="status"></p>
       </section>
 
       <section class="panel preview" aria-label="Composed preview">
-        <h2 class="step-title"><span class="num">3</span> Preview &amp; customize</h2>
+        <h2 class="step-title"><span class="num">4</span> Preview &amp; customize</h2>
         <div class="stage-wrap">
           <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
           <div class="stage-empty" id="empty">
@@ -95,12 +116,13 @@
         <p class="hint" id="customize-hint" hidden>Drag a frame to reposition it, or drag its bottom-right corner to resize. Then save it as a reusable template.</p>
         <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
         <div class="export-result" id="export-result" hidden></div>
-        <p class="scope-note">Shapes, captions, b-roll zones, title elements, overlays, and audio cleanup are intentionally out of scope for this step.</p>
+        <p class="scope-note">Shapes, captions, b-roll zones, title elements, and overlays are intentionally out of scope for this step.</p>
       </section>
     </main>
 
     <script src="app/presets.js"></script>
     <script src="app/episode.js"></script>
+    <script src="app/audio.js"></script>
     <script src="app/templates.js"></script>
     <script src="app/preview.js"></script>
     <script src="app/exporter.js"></script>

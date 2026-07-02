@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.log
 .DS_Store
+# Local verification artifacts (screenshots / generated media) never belong in the repo.
+tests/*.png
+tests/*.webm
