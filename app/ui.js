@@ -304,6 +304,39 @@
     applyLayout(t.id);
   });
 
+  // Start a new episode without reloading the page: clears uploaded media,
+  // social links, moments, and audio settings back to defaults, but never
+  // touches saved show templates (those live independently in
+  // app/templates.js) — the whole point is that a fresh episode can still
+  // pick one up from the setup/preset controls below.
+  $("new-episode").addEventListener("click", function () {
+    if (editor.isOpen()) closeEditor();
+    preview.pause();
+    assignedBuckets(episode).forEach(function (bucket) {
+      preview.clear(bucket);
+    });
+    PDC.episode.resetEpisode(episode, { title: "Episode 1" });
+
+    document.querySelectorAll("input[data-file-bucket]").forEach(function (input) { input.value = ""; });
+    document.querySelectorAll("input[data-link-bucket]").forEach(function (input) { input.value = ""; });
+    $("moment-text").value = "";
+    $("moment-start").value = "";
+    $("moment-end").value = "";
+    showMomentError("");
+    renderMomentList();
+
+    $("export-progress").hidden = true;
+    $("export-bar").style.width = "0%";
+    $("export-result").hidden = true;
+    $("export-result").innerHTML = "";
+
+    SPEAKER_BUCKETS.forEach(updateBucketRow);
+    syncAudioUi();
+    markSelected(episode.presetId);
+    preview.render(episode);
+    refresh();
+  });
+
   $("play").addEventListener("click", function () {
     if (preview.isPlaying()) preview.pause();
     else preview.play();

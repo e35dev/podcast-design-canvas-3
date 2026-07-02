@@ -7,7 +7,7 @@
   const PDC = (window.PDC = window.PDC || {});
   const { SPEAKER_BUCKETS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
 
-  function createEpisode(init) {
+  function blankEpisodeState(init) {
     return {
       title: (init && init.title) || "Untitled episode",
       // bucket -> { name, size, type } media descriptor (no bytes here; the UI
@@ -27,6 +27,20 @@
         noiseReduction: "balanced",
       },
     };
+  }
+
+  function createEpisode(init) {
+    return blankEpisodeState(init);
+  }
+
+  // Resets an episode back to a blank slate IN PLACE (same object reference)
+  // so the UI's one long-lived episode object never needs to be swapped out —
+  // every closure that captured it keeps working after "start new episode".
+  // Never touches saved templates (app/templates.js owns those separately),
+  // which is the whole point: a fresh episode must not lose them.
+  function resetEpisode(episode, init) {
+    Object.assign(episode, blankEpisodeState(init));
+    return episode;
   }
 
   // Assign an uploaded file descriptor to a bucket. Returns the episode for
@@ -149,6 +163,7 @@
   PDC.episode = {
     MIN_SPEAKERS,
     createEpisode,
+    resetEpisode,
     assignMedia,
     clearMedia,
     assignedBuckets,

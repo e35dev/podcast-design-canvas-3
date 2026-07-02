@@ -153,3 +153,52 @@ test("audio quality survives preset switches and media updates", () => {
     noiseReduction: "strong",
   });
 });
+
+test("resetEpisode clears media, links, moments, and audio back to defaults", () => {
+  const ep = E.createEpisode({ title: "Ep 1" });
+  E.assignMedia(ep, "host", media("h.webm"));
+  E.assignMedia(ep, "guest1", media("g.webm"));
+  E.setSocialLink(ep, "host", "https://x.com/hostperson");
+  E.setAudioQuality(ep, { leveling: "strong", clarity: "enhanced", noiseReduction: "off" });
+  E.setPreset(ep, "stack");
+  PDC.moments.addMoment(ep, { type: "title", text: "Intro", start: 0, end: 3 });
+  assert.equal(PDC.moments.listMoments(ep).length, 1);
+
+  const returned = E.resetEpisode(ep, { title: "Episode 2" });
+  assert.equal(returned, ep, "resetEpisode mutates the same object in place");
+  assert.equal(ep.title, "Episode 2");
+  assert.deepEqual(E.assignedBuckets(ep), []);
+  assert.equal(E.getSocialLink(ep, "host"), "");
+  assert.equal(ep.presetId, PDC.presets.DEFAULT_PRESET_ID);
+  assert.deepEqual(E.getAudioQuality(ep), {
+    leveling: "balanced",
+    clarity: "balanced",
+    noiseReduction: "balanced",
+  });
+  assert.deepEqual(PDC.moments.listMoments(ep), []);
+  assert.equal(E.canCompose(ep), false);
+});
+
+test("resetEpisode never touches saved templates, so a fresh episode can still apply one", () => {
+  const ep = E.createEpisode({ title: "Ep 1" });
+  const saved = PDC.templates.saveTemplate("Keep Me", {
+    host: { x: 0, y: 0, w: 40, h: 100 },
+    guest1: { x: 40, y: 0, w: 60, h: 100 },
+  });
+  E.assignMedia(ep, "host", media("h.webm"));
+  E.assignMedia(ep, "guest1", media("g.webm"));
+  E.setPreset(ep, saved.id);
+
+  E.resetEpisode(ep, { title: "Episode 2" });
+  assert.ok(PDC.templates.listTemplates().some((t) => t.id === saved.id), "template should still exist after reset");
+
+  // The fresh episode starts on the default preset (not still pointed at the
+  // old template) but can pick the saved template right back up.
+  assert.notEqual(ep.presetId, saved.id);
+  E.assignMedia(ep, "host", media("new-host.webm"));
+  E.assignMedia(ep, "guest1", media("new-guest.webm"));
+  E.setPreset(ep, saved.id);
+  const rects = PDC.templates.resolveLayout(ep, 2);
+  assert.deepEqual(rects[0], { x: 0, y: 0, w: 40, h: 100 });
+  assert.deepEqual(rects[1], { x: 40, y: 0, w: 60, h: 100 });
+});
