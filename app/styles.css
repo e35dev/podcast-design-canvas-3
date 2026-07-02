@@ -215,6 +215,25 @@ body {
 }
 .transport button:disabled { opacity: 0.45; cursor: not-allowed; }
 .transport .primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: none; color: #fff; }
+.scrub {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.scrub label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.scrub input[type="range"] { width: 100%; }
+.scrub span {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 86px;
+  text-align: right;
+}
 .scope-note { margin-top: 14px; color: var(--muted); font-size: 12px; }
 
 /* Saved custom layouts (selectable like presets) */
@@ -266,6 +285,102 @@ body {
 .audio-option[aria-pressed="true"] {
   border-color: var(--accent);
   background: rgba(108, 140, 255, 0.17);
+}
+
+/* Timed moments ------------------------------------------------------------ */
+.moments-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  padding: 10px;
+  margin-top: 8px;
+}
+.moments-form {
+  display: grid;
+  grid-template-columns: 110px minmax(160px, 1fr) 100px 100px auto auto;
+  gap: 8px;
+  align-items: end;
+}
+.moments-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.moments-form .grow {
+  min-width: 160px;
+}
+.moments-form label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.moments-form input,
+.moments-form select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10131d;
+  color: var(--ink);
+  font-size: 13px;
+  padding: 7px 8px;
+}
+.moments-form button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10131d;
+  color: var(--ink);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.moments-form button:hover { border-color: var(--muted); }
+.moments-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.moment-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #121724;
+}
+.moment-pill {
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: #d7def5;
+}
+.moment-range {
+  color: var(--muted);
+  font-size: 12px;
+}
+.moment-text {
+  color: var(--ink);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.moment-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+.moment-actions button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0f1420;
+  color: var(--ink);
+  font-size: 12px;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+.moment-actions button:hover { border-color: var(--muted); }
+@media (max-width: 980px) {
+  .moments-form { grid-template-columns: 1fr 1fr; }
 }
 
 /* Custom-layout editor overlay (drag/resize frames over the composed canvas) */

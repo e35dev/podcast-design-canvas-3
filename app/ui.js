@@ -2,7 +2,7 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason, setAudioQuality, getAudioQuality } = PDC.episode;
+  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason, setAudioQuality, getAudioQuality, MOMENT_TYPES, addVisualMoment, updateVisualMoment, removeVisualMoment, listVisualMoments } = PDC.episode;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -109,6 +109,101 @@
     btn.addEventListener("click", function () {
       handleAudioPick(btn.getAttribute("data-audio-setting"), btn.getAttribute("data-audio-value"));
     });
+  });
+
+  const momentType = $("moment-type");
+  const momentText = $("moment-text");
+  const momentStart = $("moment-start");
+  const momentEnd = $("moment-end");
+  const momentSave = $("moment-save");
+  const momentCancelEdit = $("moment-cancel-edit");
+  const momentsList = $("moments-list");
+  const momentsStatus = $("moments-status");
+  let editingMomentId = null;
+
+  function fmtTime(sec) {
+    const n = Math.max(0, Number(sec) || 0);
+    return n.toFixed(1) + "s";
+  }
+
+  function resetMomentForm() {
+    editingMomentId = null;
+    momentType.value = "title";
+    momentText.value = "";
+    momentStart.value = "0";
+    momentEnd.value = "3";
+    momentSave.textContent = "Add moment";
+    momentCancelEdit.hidden = true;
+  }
+
+  function renderMoments() {
+    const all = listVisualMoments(episode);
+    momentsList.innerHTML = "";
+    if (!all.length) {
+      momentsStatus.textContent = "No visual moments yet.";
+      return;
+    }
+    momentsStatus.textContent = all.length + " timed moment" + (all.length === 1 ? "" : "s") + " saved.";
+    all.forEach(function (m) {
+      const row = document.createElement("div");
+      row.className = "moment-item";
+      row.dataset.momentId = String(m.id);
+      row.innerHTML =
+        '<span class="moment-pill">' + m.type + "</span>" +
+        '<span class="moment-range">' + fmtTime(m.start) + " → " + fmtTime(m.end) + "</span>" +
+        '<span class="moment-text">' + m.text + "</span>" +
+        '<span class="moment-actions"><button type="button" data-edit="' + m.id + '">Edit</button><button type="button" data-remove="' + m.id + '">Remove</button></span>';
+      momentsList.appendChild(row);
+    });
+  }
+
+  momentSave.addEventListener("click", function () {
+    const payload = {
+      type: MOMENT_TYPES.includes(momentType.value) ? momentType.value : "callout",
+      text: (momentText.value || "").trim(),
+      start: Number(momentStart.value),
+      end: Number(momentEnd.value),
+    };
+    const out = editingMomentId == null
+      ? addVisualMoment(episode, payload)
+      : updateVisualMoment(episode, editingMomentId, payload);
+    if (!out) {
+      momentsStatus.textContent = "Enter a valid type, text, and time range (end must be after start).";
+      return;
+    }
+    resetMomentForm();
+    renderMoments();
+    preview.render(episode);
+    refresh();
+  });
+
+  momentCancelEdit.addEventListener("click", function () {
+    resetMomentForm();
+    renderMoments();
+  });
+
+  momentsList.addEventListener("click", function (event) {
+    const removeId = event.target && event.target.getAttribute("data-remove");
+    if (removeId) {
+      removeVisualMoment(episode, Number(removeId));
+      if (editingMomentId === Number(removeId)) resetMomentForm();
+      renderMoments();
+      preview.render(episode);
+      refresh();
+      return;
+    }
+    const editId = event.target && event.target.getAttribute("data-edit");
+    if (editId) {
+      const current = listVisualMoments(episode).find((m) => m.id === Number(editId));
+      if (!current) return;
+      editingMomentId = current.id;
+      momentType.value = current.type;
+      momentText.value = current.text;
+      momentStart.value = String(current.start);
+      momentEnd.value = String(current.end);
+      momentSave.textContent = "Update moment";
+      momentCancelEdit.hidden = false;
+    }
   });
 
   const presetsEl = $("presets");
@@ -235,6 +330,30 @@
     $("mute").textContent = next ? "🔊 Sound on" : "🔇 Muted";
   });
 
+  const scrub = $("preview-scrub");
+  const scrubTime = $("preview-time");
+  function syncScrubUi() {
+    const duration = preview.getDuration();
+    const current = preview.getCurrentTime();
+    const ready = canCompose(episode) && duration > 0;
+    scrub.disabled = !ready;
+    if (ready) {
+      scrub.value = String(Math.round((Math.min(duration, current) / duration) * 1000));
+      scrubTime.textContent = fmtTime(current) + " / " + fmtTime(duration);
+    } else {
+      scrub.value = "0";
+      scrubTime.textContent = "0.0s / 0.0s";
+    }
+  }
+  scrub.addEventListener("input", function () {
+    const duration = preview.getDuration();
+    if (!duration) return;
+    const t = (Number(scrub.value) / 1000) * duration;
+    preview.seek(t);
+    syncScrubUi();
+  });
+  setInterval(syncScrubUi, 120);
+
   $("export").addEventListener("click", async function () {
     if (!canCompose(episode)) return;
     const btn = $("export");
@@ -260,6 +379,7 @@
         "Audio: " + getAudioQuality(episode).leveling + " leveling, " +
         getAudioQuality(episode).clarity + " clarity, " +
         getAudioQuality(episode).noiseReduction + " noise reduction. " +
+        listVisualMoments(episode).length + " visual moment" + (listVisualMoments(episode).length === 1 ? "" : "s") + ". " +
         '<a id="export-download" href="' + out.url + '" download="' + fname + '">Download again</a>';
       // A real playable preview of the exported file (also lets review confirm playback).
       const v = document.createElement("video");
@@ -295,10 +415,13 @@
     const exportBtn = $("export");
     if (exportBtn && exportBtn.textContent.indexOf("Exporting") === -1) exportBtn.disabled = !ready;
     if (!editor.isOpen()) $("customize").disabled = !ready;
+    syncScrubUi();
   }
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   syncAudioUi();
+  resetMomentForm();
+  renderMoments();
   renderTemplates();
   refresh();
 })();

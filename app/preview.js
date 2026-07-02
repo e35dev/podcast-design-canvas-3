@@ -19,6 +19,13 @@
     let episodeRef = null;
     let referenceTime = 0;
 
+    function mediaDuration() {
+      const durations = Object.values(videos)
+        .map((video) => video.duration)
+        .filter((d) => Number.isFinite(d) && d > 0);
+      return durations.length ? Math.max(...durations) : 0;
+    }
+
     function syncReferenceTime() {
       const times = Object.values(videos)
         .map((video) => video.currentTime)
@@ -105,6 +112,7 @@
 
     function drawFrame() {
       if (!episodeRef) return;
+      const now = syncReferenceTime();
       const buckets = PDC.episode.assignedBuckets(episodeRef);
       const rects = PDC.templates
         ? PDC.templates.resolveLayout(episodeRef, buckets.length)
@@ -161,8 +169,58 @@
         }
       });
 
+      const activeMoments = PDC.episode.activeVisualMomentsAt(episodeRef, now);
+      drawMomentsOverlay(activeMoments, w, h);
+      canvasEl.dataset.momentText = activeMoments.map((it) => it.text).join("|");
+      canvasEl.dataset.momentCount = String(activeMoments.length);
+      canvasEl.dataset.previewTime = String(Number(now || 0).toFixed(2));
+
       canvasEl.dataset.preset = episodeRef.presetId;
       canvasEl.dataset.speakers = String(buckets.length);
+    }
+
+    function drawMomentsOverlay(activeMoments, w, h) {
+      if (!activeMoments || !activeMoments.length) return;
+      const titles = activeMoments.filter((it) => it.type === "title");
+      const callouts = activeMoments.filter((it) => it.type !== "title");
+
+      if (titles.length) {
+        const title = titles[0];
+        const boxW = Math.min(w * 0.82, Math.max(280, title.text.length * 13));
+        const x = (w - boxW) / 2;
+        const y = Math.max(20, h * 0.04);
+        ctx.fillStyle = "rgba(12, 16, 30, 0.74)";
+        ctx.fillRect(x, y, boxW, 56);
+        ctx.strokeStyle = "rgba(168, 188, 255, 0.9)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, boxW - 2, 54);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 28px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(title.text, x + boxW / 2, y + 30);
+      }
+
+      if (callouts.length) {
+        const rowH = 38;
+        callouts.slice(0, 2).forEach(function (callout, idx) {
+          const boxW = Math.min(w * 0.74, Math.max(300, callout.text.length * 11));
+          const x = (w - boxW) / 2;
+          const y = h - 32 - rowH * (callouts.length - idx);
+          ctx.fillStyle = "rgba(0, 0, 0, 0.68)";
+          ctx.fillRect(x, y, boxW, rowH);
+          ctx.strokeStyle = "rgba(72, 214, 168, 0.94)";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 1, y + 1, boxW - 2, rowH - 2);
+          ctx.fillStyle = "#f7fff7";
+          ctx.font = "600 20px system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(callout.text, x + boxW / 2, y + rowH / 2 + 1);
+        });
+      }
+      ctx.textAlign = "start";
+      ctx.textBaseline = "alphabetic";
     }
 
     function loop() {
@@ -230,6 +288,17 @@
       play();
     }
 
+    function seek(time) {
+      const duration = mediaDuration();
+      const t = Number(time);
+      if (!Number.isFinite(t)) return referenceTime;
+      const next = Math.max(0, duration ? Math.min(t, duration) : t);
+      referenceTime = next;
+      seekAll(next);
+      drawFrame();
+      return next;
+    }
+
     function setMuted(muted) {
       Object.keys(videos).forEach(function (b) {
         videos[b].muted = muted;
@@ -247,6 +316,11 @@
       isPlaying: function () {
         return playing;
       },
+      getCurrentTime: function () {
+        return syncReferenceTime();
+      },
+      getDuration: mediaDuration,
+      seek,
       drawFrame,
     };
   }

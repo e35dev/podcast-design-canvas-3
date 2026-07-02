@@ -22,6 +22,8 @@
         clarity: "balanced",
         noiseReduction: "balanced",
       },
+      visualMoments: [],
+      nextMomentId: 1,
     };
   }
 
@@ -83,6 +85,77 @@
   function getAudioQuality(episode) {
     const q = ensureAudioQuality(episode);
     return { leveling: q.leveling, clarity: q.clarity, noiseReduction: q.noiseReduction };
+  }
+
+  const MOMENT_TYPES = ["title", "callout"];
+  const MAX_MOMENT_TEXT = 120;
+
+  function normalizeSecond(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return NaN;
+    return Math.max(0, Math.round(n * 100) / 100);
+  }
+
+  function ensureMoments(episode) {
+    if (!Array.isArray(episode.visualMoments)) episode.visualMoments = [];
+    if (!Number.isInteger(episode.nextMomentId) || episode.nextMomentId < 1) {
+      const maxId = episode.visualMoments.reduce((m, it) => Math.max(m, Number(it.id) || 0), 0);
+      episode.nextMomentId = maxId + 1;
+    }
+    return episode.visualMoments;
+  }
+
+  function normalizeMoment(input) {
+    const type = (input && input.type) || "callout";
+    const text = String((input && input.text) || "").trim().slice(0, MAX_MOMENT_TEXT);
+    const start = normalizeSecond(input && input.start);
+    const end = normalizeSecond(input && input.end);
+    if (!MOMENT_TYPES.includes(type)) return null;
+    if (!text) return null;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    if (end <= start) return null;
+    return { type, text, start, end };
+  }
+
+  function addVisualMoment(episode, input) {
+    const moments = ensureMoments(episode);
+    const clean = normalizeMoment(input);
+    if (!clean) return null;
+    const id = episode.nextMomentId++;
+    const next = { id, type: clean.type, text: clean.text, start: clean.start, end: clean.end };
+    moments.push(next);
+    return { ...next };
+  }
+
+  function updateVisualMoment(episode, id, patch) {
+    const moments = ensureMoments(episode);
+    const idx = moments.findIndex((it) => Number(it.id) === Number(id));
+    if (idx < 0) return null;
+    const clean = normalizeMoment({ ...moments[idx], ...(patch || {}) });
+    if (!clean) return null;
+    moments[idx] = { id: moments[idx].id, type: clean.type, text: clean.text, start: clean.start, end: clean.end };
+    return { ...moments[idx] };
+  }
+
+  function removeVisualMoment(episode, id) {
+    const moments = ensureMoments(episode);
+    const idx = moments.findIndex((it) => Number(it.id) === Number(id));
+    if (idx < 0) return false;
+    moments.splice(idx, 1);
+    return true;
+  }
+
+  function listVisualMoments(episode) {
+    return ensureMoments(episode)
+      .slice()
+      .sort((a, b) => a.start - b.start || a.end - b.end || a.id - b.id)
+      .map((it) => ({ ...it }));
+  }
+
+  function activeVisualMomentsAt(episode, timeSec) {
+    const t = Number(timeSec);
+    if (!Number.isFinite(t)) return [];
+    return listVisualMoments(episode).filter((it) => t >= it.start && t < it.end);
   }
 
   // Pull a readable handle out of a social/profile URL (last path segment, or a
@@ -153,6 +226,12 @@
     getSocialLink,
     setAudioQuality,
     getAudioQuality,
+    MOMENT_TYPES,
+    addVisualMoment,
+    updateVisualMoment,
+    removeVisualMoment,
+    listVisualMoments,
+    activeVisualMomentsAt,
     deriveHandle,
     speakerName,
     canCompose,

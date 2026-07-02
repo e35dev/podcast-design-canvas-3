@@ -92,12 +92,41 @@
             </div>
           </div>
         </div>
+        <h2 class="step-title"><span class="num">4</span> Timed visual moments</h2>
+        <p class="hint">Add timed title/callout moments that show only in their scheduled ranges and burn into export.</p>
+        <div class="moments-panel" id="moments-panel">
+          <div class="moments-form">
+            <label>
+              <span>Type</span>
+              <select id="moment-type" aria-label="Moment type">
+                <option value="title">Title</option>
+                <option value="callout">Callout</option>
+              </select>
+            </label>
+            <label class="grow">
+              <span>Text</span>
+              <input id="moment-text" type="text" maxlength="120" placeholder="Episode title or callout text" aria-label="Moment text" />
+            </label>
+            <label>
+              <span>Start (s)</span>
+              <input id="moment-start" type="number" step="0.1" min="0" value="0" aria-label="Moment start seconds" />
+            </label>
+            <label>
+              <span>End (s)</span>
+              <input id="moment-end" type="number" step="0.1" min="0.1" value="3" aria-label="Moment end seconds" />
+            </label>
+            <button id="moment-save" type="button">Add moment</button>
+            <button id="moment-cancel-edit" type="button" hidden>Cancel edit</button>
+          </div>
+          <p class="hint" id="moments-status">No visual moments yet.</p>
+          <div class="moments-list" id="moments-list" aria-label="Timed moments list"></div>
+        </div>
 
         <p class="readiness" id="readiness" role="status"></p>
       </section>
 
       <section class="panel preview" aria-label="Composed preview">
-        <h2 class="step-title"><span class="num">4</span> Preview &amp; customize</h2>
+        <h2 class="step-title"><span class="num">5</span> Preview &amp; customize</h2>
         <div class="stage-wrap">
           <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
           <div class="stage-empty" id="empty">
@@ -111,6 +140,11 @@
           <button id="mute" type="button" aria-pressed="false" disabled>🔇 Muted</button>
           <button id="export" type="button" disabled>⬇ Export video</button>
         </div>
+        <div class="scrub">
+          <label for="preview-scrub">Scrub preview</label>
+          <input id="preview-scrub" type="range" min="0" max="1000" step="1" value="0" disabled />
+          <span id="preview-time">0.0s / 0.0s</span>
+        </div>
         <div class="customize" id="customize-bar">
           <button id="customize" type="button" disabled>✎ Customize layout</button>
           <span class="customize-edit" id="customize-edit" hidden>
@@ -122,7 +156,7 @@
         <p class="hint" id="customize-hint" hidden>Drag a frame to reposition it, or drag its bottom-right corner to resize. Then save it as a reusable template.</p>
         <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
         <div class="export-result" id="export-result" hidden></div>
-        <p class="scope-note">Shapes, captions, b-roll zones, title elements, and overlays are intentionally out of scope for this step.</p>
+        <p class="scope-note">Automatic captions, b-roll zones, transcript-driven editing, and short-form clip generation are intentionally out of scope for this step.</p>
       </section>
     </main>
 
