@@ -59,6 +59,73 @@ test("resolveLayout falls back to the built-in preset geometry for preset ids", 
   assert.deepEqual(rects, preset.layout(2));
 });
 
+function makeLocalStorage() {
+  const store = new Map();
+  return {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+}
+
+test("a saved template survives a reload (fresh realm, same underlying storage)", () => {
+  const localStorage = makeLocalStorage();
+  const PDC1 = loadPDC(root, { localStorage });
+  const saved = PDC1.templates.saveTemplate("Reusable Show", {
+    host: { x: 5, y: 10, w: 40, h: 40 },
+    guest1: { x: 55, y: 10, w: 40, h: 40 },
+  });
+
+  // Simulate a page refresh / brand-new episode: a fresh module realm, same
+  // localStorage backing it — nothing but window.localStorage carries over.
+  const PDC2 = loadPDC(root, { localStorage });
+  const persisted = PDC2.templates.listTemplates();
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].id, saved.id);
+  assert.equal(persisted[0].name, "Reusable Show");
+  assert.deepEqual(persisted[0].rects, {
+    host: { x: 5, y: 10, w: 40, h: 40 },
+    guest1: { x: 55, y: 10, w: 40, h: 40 },
+  });
+
+  // A template saved after reload never collides with the persisted id.
+  const second = PDC2.templates.saveTemplate("Another", { host: { x: 0, y: 0, w: 50, h: 50 } });
+  assert.notEqual(second.id, saved.id);
+
+  // ...and both templates are there the next time the app loads.
+  const PDC3 = loadPDC(root, { localStorage });
+  assert.deepEqual(
+    PDC3.templates.listTemplates().map((t) => t.id).sort(),
+    [saved.id, second.id].sort(),
+  );
+});
+
+test("a template applies to a freshly created episode with new media assigned", () => {
+  const localStorage = makeLocalStorage();
+  const PDC1 = loadPDC(root, { localStorage });
+  const saved = PDC1.templates.saveTemplate("Corner Host", {
+    host: { x: 10, y: 20, w: 30, h: 30 },
+    guest1: { x: 50, y: 20, w: 30, h: 30 },
+  });
+
+  const PDC2 = loadPDC(root, { localStorage });
+  const freshEpisode = PDC2.episode.createEpisode({ title: "Episode 2" });
+  assert.deepEqual(freshEpisode.media, {}, "a brand-new episode carries none of the old episode's media");
+  PDC2.episode.assignMedia(freshEpisode, "host", { name: "new-host.webm", size: 1, type: "video/webm" });
+  PDC2.episode.assignMedia(freshEpisode, "guest1", { name: "new-guest.webm", size: 1, type: "video/webm" });
+  PDC2.episode.setPreset(freshEpisode, saved.id);
+  const rects = PDC2.templates.resolveLayout(freshEpisode, 2);
+  assert.deepEqual(rects[0], { x: 10, y: 20, w: 30, h: 30 });
+  assert.deepEqual(rects[1], { x: 50, y: 20, w: 30, h: 30 });
+});
+
+test("corrupt or unavailable storage falls back to an empty template list instead of crashing", () => {
+  const brokenStorage = { getItem: () => "not json", setItem: () => {}, removeItem: () => {} };
+  assert.deepEqual(loadPDC(root, { localStorage: brokenStorage }).templates.listTemplates(), []);
+  // No localStorage on window at all (e.g. disabled storage) is also safe.
+  assert.deepEqual(loadPDC(root, {}).templates.listTemplates(), []);
+});
+
 test("the draft layout renders live and clears cleanly", () => {
   const PDC = loadPDC(root);
   PDC.templates.setDraft({ host: { x: 10, y: 10, w: 30, h: 30 }, guest1: { x: 50, y: 50, w: 30, h: 30 } });
