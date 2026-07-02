@@ -89,11 +89,33 @@
   // controls. Moments live on the episode model, so they survive preset and
   // template switches; the preview draws whichever are active each frame.
   const M = PDC.moments;
+  const KIND_LABELS = { title: "Title", callout: "Callout", broll: "B-roll" };
+  // A b-roll moment references an image the preview holds; the picked file waits
+  // here (with a fresh imageId) until the moment is added, then it is decoded
+  // into the preview under that id. Cleared whenever the picker changes/resets.
+  let pendingImage = null; // { id, file, name } or null
+
   function showMomentError(message) {
     const el = $("moment-error");
     el.textContent = message || "";
     el.hidden = !message;
   }
+
+  function resetPendingImage() {
+    pendingImage = null;
+    $("moment-image").value = "";
+    $("moment-image-name").textContent = "Upload b-roll image";
+  }
+
+  // Show the image picker only for b-roll moments; text stays available as an
+  // optional caption. Switching away from b-roll drops any pending pick.
+  function syncMomentForm() {
+    const isBroll = $("moment-type").value === "broll";
+    $("moment-image-label").hidden = !isBroll;
+    $("moment-text").placeholder = isBroll ? "Caption (optional)" : "Text to display";
+    if (!isBroll) resetPendingImage();
+  }
+
   function renderMomentList() {
     const list = $("moment-list");
     list.innerHTML = "";
@@ -103,10 +125,11 @@
       li.dataset.momentType = m.type;
       const kind = document.createElement("span");
       kind.className = "moment-kind " + m.type;
-      kind.textContent = m.type === "title" ? "Title" : "Callout";
+      kind.textContent = KIND_LABELS[m.type] || m.type;
       const text = document.createElement("span");
       text.className = "moment-text";
-      text.textContent = m.text;
+      // A b-roll moment may have no caption; fall back to its image file name.
+      text.textContent = m.text || (m.type === "broll" ? m.imageName || "B-roll image" : "");
       const range = document.createElement("span");
       range.className = "moment-range";
       range.textContent = M.formatTime(m.start) + "–" + M.formatTime(m.end);
@@ -114,8 +137,9 @@
       remove.type = "button";
       remove.className = "moment-remove";
       remove.textContent = "Remove";
-      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + m.text);
+      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + (m.text || m.imageName || ""));
       remove.addEventListener("click", function () {
+        if (m.type === "broll" && m.imageId) preview.clearMomentImage(m.imageId);
         M.removeMoment(episode, m.id);
         renderMomentList();
         preview.drawFrame();
@@ -124,23 +148,51 @@
       list.appendChild(li);
     });
   }
+
+  $("moment-type").addEventListener("change", syncMomentForm);
+
+  const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+  function isImageFile(file) {
+    if (!file) return false;
+    if (file.type && /^image\//i.test(file.type)) return true;
+    return IMAGE_EXT.test(file.name || "");
+  }
+  $("moment-image").addEventListener("change", function () {
+    const file = ($("moment-image").files || [])[0];
+    if (!isImageFile(file)) {
+      resetPendingImage();
+      return;
+    }
+    pendingImage = { id: M.nextImageId(), file: file, name: file.name };
+    $("moment-image-name").textContent = file.name;
+  });
+
   $("moment-add").addEventListener("click", function () {
+    const isBroll = $("moment-type").value === "broll";
     const fields = {
       type: $("moment-type").value,
       text: $("moment-text").value,
       start: $("moment-start").value,
       end: $("moment-end").value,
     };
+    if (isBroll && pendingImage) {
+      fields.imageId = pendingImage.id;
+      fields.imageName = pendingImage.name;
+    }
     const problem = M.validateMoment(fields);
     if (problem) {
       showMomentError(problem);
       return;
     }
+    // Hand the picked image to the preview under its moment's id before adding,
+    // so the compositor can draw it the moment it becomes active.
+    if (isBroll && pendingImage) preview.setMomentImage(pendingImage.id, pendingImage.file);
     M.addMoment(episode, fields);
     showMomentError("");
     $("moment-text").value = "";
     $("moment-start").value = "";
     $("moment-end").value = "";
+    resetPendingImage();
     renderMomentList();
     preview.drawFrame();
   });
@@ -315,6 +367,10 @@
     assignedBuckets(episode).forEach(function (bucket) {
       preview.clear(bucket);
     });
+    // Release any b-roll images the moments held before the episode is reset.
+    M.listMoments(episode).forEach(function (m) {
+      if (m.type === "broll" && m.imageId) preview.clearMomentImage(m.imageId);
+    });
     PDC.episode.resetEpisode(episode, { title: "Episode 1" });
 
     document.querySelectorAll("input[data-file-bucket]").forEach(function (input) { input.value = ""; });
@@ -322,6 +378,9 @@
     $("moment-text").value = "";
     $("moment-start").value = "";
     $("moment-end").value = "";
+    resetPendingImage();
+    $("moment-type").value = "title";
+    syncMomentForm();
     showMomentError("");
     renderMomentList();
 
@@ -416,6 +475,7 @@
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   syncAudioUi();
+  syncMomentForm();
   renderMomentList();
   renderTemplates();
   refresh();

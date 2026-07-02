@@ -1,17 +1,25 @@
-// app/moments.js — timed visual moments (episode title cards and callout
-// lower-thirds) scheduled over the composed preview. Pure, DOM-free model:
-// moments live ON THE EPISODE (not on a preset or the preview), so switching
-// Split/Stack/Spotlight or a custom template keeps every scheduled moment
-// attached and rendered over the new layout. The preview draws the active
-// moments straight onto the stage canvas each frame, and because export
-// records that same canvas, the moments are burned into the exported video at
-// the same scheduled times. Classic script — exposed on window.PDC.moments.
+// app/moments.js — timed visual moments (episode title cards, callout
+// lower-thirds, and b-roll image overlays) scheduled over the composed preview.
+// Pure, DOM-free model: moments live ON THE EPISODE (not on a preset or the
+// preview), so switching Split/Stack/Spotlight or a custom template keeps every
+// scheduled moment attached and rendered over the new layout. The preview draws
+// the active moments straight onto the stage canvas each frame, and because
+// export records that same canvas, the moments are burned into the exported
+// video at the same scheduled times.
+//
+// A b-roll moment carries an opaque `imageId` referencing a decoded image the
+// preview holds in the browser (app/preview.js keeps the HTMLImageElement, the
+// same way it keeps the decoding <video> elements for speakers). The DOM-free
+// model deliberately never holds image bytes, so it stays unit-testable under
+// plain Node and never lands in localStorage-backed templates.
+// Classic script — exposed on window.PDC.moments.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
 
-  const MOMENT_TYPES = ["title", "callout"];
-  const TYPE_LABELS = { title: "Episode title", callout: "Callout" };
+  const MOMENT_TYPES = ["title", "callout", "broll"];
+  const TYPE_LABELS = { title: "Episode title", callout: "Callout", broll: "B-roll image" };
   let seq = 0;
+  let imageSeq = 0;
 
   function ensureMoments(episode) {
     if (!episode.moments) episode.moments = [];
@@ -39,11 +47,17 @@
   }
 
   // "" when the fields describe a valid moment, otherwise a creator-readable
-  // reason. start/end may be raw strings (seconds or M:SS) or numbers.
+  // reason. start/end may be raw strings (seconds or M:SS) or numbers. Text is
+  // required for title/callout moments; a b-roll moment instead requires an
+  // uploaded image (imageId), and its text is an optional caption.
   function validateMoment(fields) {
     const f = fields || {};
-    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title or callout).";
-    if (!String(f.text == null ? "" : f.text).trim()) return "Enter the text this moment should display.";
+    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title, callout, or b-roll).";
+    if (f.type === "broll") {
+      if (!String(f.imageId == null ? "" : f.imageId).trim()) return "Upload a PNG image for this b-roll moment.";
+    } else if (!String(f.text == null ? "" : f.text).trim()) {
+      return "Enter the text this moment should display.";
+    }
     const start = parseTime(f.start);
     const end = parseTime(f.end);
     if (!Number.isFinite(start)) return "Enter a valid start time (seconds or M:SS).";
@@ -60,10 +74,15 @@
     const moment = {
       id: "moment-" + ++seq,
       type: fields.type,
-      text: String(fields.text).trim(),
+      text: String(fields.text == null ? "" : fields.text).trim(),
       start: parseTime(fields.start),
       end: parseTime(fields.end),
     };
+    if (fields.type === "broll") {
+      moment.imageId = String(fields.imageId).trim();
+      // A creator-facing label for the moment list when no caption is given.
+      moment.imageName = String(fields.imageName == null ? "" : fields.imageName).trim();
+    }
     ensureMoments(episode).push(moment);
     return moment;
   }
@@ -89,6 +108,13 @@
     return listMoments(episode).filter((m) => t >= m.start && t < m.end);
   }
 
+  // Fresh opaque id for an image a b-roll moment references. The bytes live in
+  // the preview (an HTMLImageElement keyed by this id); the model only carries
+  // the id, so it stays DOM-free and never serializes image data.
+  function nextImageId() {
+    return "broll-img-" + ++imageSeq;
+  }
+
   PDC.moments = {
     MOMENT_TYPES,
     TYPE_LABELS,
@@ -99,5 +125,6 @@
     removeMoment,
     listMoments,
     activeMoments,
+    nextImageId,
   };
 })();
