@@ -294,6 +294,27 @@ body {
 .moment-form #moment-start,
 .moment-form #moment-end,
 .moment-form #moment-add { grid-column: span 2; }
+/* B-roll image picker: its own full-width row, shown only for b-roll moments. */
+.moment-image {
+  grid-column: span 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #10131d;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.moment-image[hidden] { display: none; }
+.moment-image #moment-image-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.moment-image input[type="file"] { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
 .moment-form select,
 .moment-form input {
   min-width: 0;
@@ -340,6 +361,7 @@ body {
 }
 .moment-kind.title { background: rgba(108, 140, 255, 0.55); }
 .moment-kind.callout { background: rgba(138, 108, 255, 0.55); }
+.moment-kind.broll { background: rgba(80, 200, 160, 0.55); }
 .moment-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .moment-range { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .moment-remove {

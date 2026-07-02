@@ -10,6 +10,10 @@
   function createPreview(canvasEl) {
     const ctx = canvasEl.getContext("2d");
     const videos = {};
+    // Decoded b-roll images keyed by the opaque imageId a b-roll moment carries
+    // (app/moments.js). The bytes live here in the browser, never in the DOM-free
+    // episode model or a saved template — the same split we use for speaker media.
+    const brollImages = {};
     const videoHost = document.createElement("div");
     videoHost.setAttribute("aria-hidden", "true");
     videoHost.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none";
@@ -138,6 +142,28 @@
       delete videos[bucket];
     }
 
+    // Decode a b-roll image file and cache it under its moment's imageId so the
+    // compositor can draw it while the owning moment is active. Redraws once the
+    // image is ready so a paused preview shows it without waiting for playback.
+    function setMomentImage(imageId, file) {
+      if (!imageId || !file) return;
+      clearMomentImage(imageId);
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img._objectUrl = url;
+      img.onload = function () {
+        drawFrame();
+      };
+      img.src = url;
+      brollImages[imageId] = img;
+    }
+
+    function clearMomentImage(imageId) {
+      const img = brollImages[imageId];
+      if (img && img._objectUrl) URL.revokeObjectURL(img._objectUrl);
+      delete brollImages[imageId];
+    }
+
     function drawFrame() {
       if (!episodeRef) return;
       const buckets = PDC.episode.assignedBuckets(episodeRef);
@@ -215,10 +241,56 @@
       ctx.save();
       ctx.textBaseline = "middle";
       active.forEach(function (moment) {
-        if (moment.type === "title") drawTitleMoment(moment, w, h);
+        if (moment.type === "broll") drawBrollMoment(moment, w, h);
+        else if (moment.type === "title") drawTitleMoment(moment, w, h);
         else drawCalloutMoment(moment, w, h);
       });
       ctx.restore();
+    }
+
+    // B-roll image overlay: the decoded image drawn as a centered inset panel
+    // (cover-scaled to fill the panel and clipped so it never bleeds past its
+    // frame), with a dark backing card and a light frame so it reads as a
+    // deliberate overlay over any preset. An optional caption sits on a bar
+    // under the image. Nothing is drawn until the image has decoded, so a
+    // b-roll moment whose upload is still loading simply shows the video.
+    function drawBrollMoment(moment, w, h) {
+      const img = brollImages[moment.imageId];
+      if (!img || !img.complete || !img.naturalWidth) return;
+      const hasCaption = !!(moment.text && moment.text.trim());
+      const panelW = Math.round(w * 0.5);
+      const panelH = Math.round(h * 0.5);
+      const panelX = Math.round((w - panelW) / 2);
+      const panelY = Math.round((h - panelH) / 2);
+      const pad = Math.max(4, Math.round(w * 0.006));
+      const capH = hasCaption ? Math.round(h * 0.07) : 0;
+
+      // Dark backing card + light frame so the inset reads as a placed overlay.
+      ctx.fillStyle = "rgba(5, 7, 12, 0.9)";
+      ctx.fillRect(panelX - pad, panelY - pad, panelW + pad * 2, panelH + capH + pad * 2);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.lineWidth = Math.max(2, Math.round(w * 0.002));
+      ctx.strokeRect(panelX - pad, panelY - pad, panelW + pad * 2, panelH + capH + pad * 2);
+
+      // Cover-scale the image into the panel, clipped to the panel rect.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(panelX, panelY, panelW, panelH);
+      ctx.clip();
+      const scale = Math.max(panelW / img.naturalWidth, panelH / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      ctx.drawImage(img, panelX + (panelW - dw) / 2, panelY + (panelH - dh) / 2, dw, dh);
+      ctx.restore();
+
+      if (hasCaption) {
+        ctx.fillStyle = "#8a6cff";
+        ctx.fillRect(panelX, panelY + panelH, panelW, Math.max(3, Math.round(h * 0.006)));
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "600 " + Math.round(h * 0.038) + "px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(moment.text, w / 2, panelY + panelH + capH / 2 + Math.round(h * 0.006), panelW - pad * 2);
+      }
     }
 
     // Episode title: a prominent centered bar across the top of the stage with
@@ -356,6 +428,8 @@
     return {
       setSource,
       clear,
+      setMomentImage,
+      clearMomentImage,
       render,
       play,
       pause,

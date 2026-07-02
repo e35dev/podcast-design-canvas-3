@@ -126,3 +126,80 @@ test("episodes created before the moments feature still work (lazy list)", () =>
   assert.ok(M.addMoment(ep, { type: "title", text: "x", start: 0, end: 1 }));
   assert.equal(M.listMoments(ep).length, 1);
 });
+
+// --- B-roll image moments ---------------------------------------------------
+
+test("broll is a valid moment type", () => {
+  assert.ok(M.MOMENT_TYPES.includes("broll"));
+  assert.equal(M.TYPE_LABELS.broll, "B-roll image");
+});
+
+test("validateMoment requires an image for b-roll, not text", () => {
+  // A b-roll moment needs an imageId and a valid range; its text is optional.
+  assert.equal(M.validateMoment({ type: "broll", imageId: "img-1", start: "0:02", end: "0:05" }), "");
+  assert.equal(M.validateMoment({ type: "broll", imageId: "img-1", text: "", start: 2, end: 5 }), "");
+  assert.equal(M.validateMoment({ type: "broll", imageId: "img-1", text: "Caption", start: 2, end: 5 }), "");
+  // Missing image is rejected, even when text is present.
+  assert.match(M.validateMoment({ type: "broll", text: "Caption", start: 2, end: 5 }), /image/i);
+  assert.match(M.validateMoment({ type: "broll", imageId: "  ", start: 2, end: 5 }), /image/i);
+  // Range rules still apply to b-roll moments.
+  assert.match(M.validateMoment({ type: "broll", imageId: "img-1", start: 5, end: 2 }), /after/i);
+  assert.match(M.validateMoment({ type: "broll", imageId: "img-1", start: "nope", end: 5 }), /start/i);
+});
+
+test("addMoment stores a b-roll moment with its image reference and optional caption", () => {
+  const ep = E.createEpisode({});
+  const broll = M.addMoment(ep, {
+    type: "broll",
+    imageId: "img-42",
+    imageName: "chart.png",
+    text: "  Q3 revenue  ",
+    start: "0:02",
+    end: "0:06",
+  });
+  assert.ok(broll && broll.id, "valid b-roll moment should be added with an id");
+  assert.equal(broll.type, "broll");
+  assert.equal(broll.imageId, "img-42");
+  assert.equal(broll.imageName, "chart.png");
+  assert.equal(broll.text, "Q3 revenue", "caption should be trimmed");
+  assert.equal(broll.start, 2);
+  assert.equal(broll.end, 6);
+
+  // A caption is optional: a b-roll moment can be added with no text at all.
+  const noCaption = M.addMoment(ep, { type: "broll", imageId: "img-7", start: 8, end: 10 });
+  assert.ok(noCaption, "b-roll moment without a caption should still be added");
+  assert.equal(noCaption.text, "");
+  assert.equal(noCaption.imageId, "img-7");
+
+  // A b-roll moment without an image is rejected and not stored.
+  assert.equal(M.addMoment(ep, { type: "broll", text: "no image", start: 1, end: 2 }), null);
+  assert.equal(M.listMoments(ep).length, 2, "invalid b-roll moment must not be stored");
+});
+
+test("b-roll moments schedule with the same [start, end) semantics", () => {
+  const ep = E.createEpisode({});
+  M.addMoment(ep, { type: "broll", imageId: "img-1", start: 2, end: 5 });
+  const ids = (t) => M.activeMoments(ep, t).map((m) => m.type);
+  assert.deepEqual(ids(1.9), [], "before start: not active");
+  assert.deepEqual(ids(2), ["broll"], "start boundary is inclusive");
+  assert.deepEqual(ids(4.9), ["broll"]);
+  assert.deepEqual(ids(5), [], "end boundary is exclusive");
+});
+
+test("nextImageId returns distinct opaque ids", () => {
+  const a = M.nextImageId();
+  const b = M.nextImageId();
+  assert.match(a, /^broll-img-/);
+  assert.notEqual(a, b, "each image id should be unique");
+});
+
+test("b-roll moments carry no image bytes (model stays serializable/DOM-free)", () => {
+  const ep = E.createEpisode({});
+  M.addMoment(ep, { type: "broll", imageId: "img-1", imageName: "a.png", start: 1, end: 2 });
+  // The stored moment references the image by id only — round-tripping through
+  // JSON (as a saved template or reload would) must not lose or embed any bytes.
+  const round = JSON.parse(JSON.stringify(M.listMoments(ep)));
+  assert.equal(round[0].imageId, "img-1");
+  assert.equal(round[0].imageName, "a.png");
+  assert.ok(!("image" in round[0]) && !("bytes" in round[0]) && !("data" in round[0]));
+});
