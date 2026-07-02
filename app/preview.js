@@ -216,9 +216,36 @@
       ctx.textBaseline = "middle";
       active.forEach(function (moment) {
         if (moment.type === "title") drawTitleMoment(moment, w, h);
+        else if (moment.type === "broll") drawBrollMoment(moment, w, h);
         else drawCalloutMoment(moment, w, h);
       });
       ctx.restore();
+    }
+
+    // B-roll image: the decoded upload drawn as a large centered inset (~70%
+    // of the stage) over the composed speakers, aspect-preserved, with a dark
+    // backing pad and light border so it clearly reads as an overlay rather
+    // than a speaker feed. The image element lives in the moments runtime
+    // registry (never in storage); until it has decoded we simply skip the
+    // draw — the composition below stays intact and the image appears on the
+    // first frame after decode.
+    function drawBrollMoment(moment, w, h) {
+      const img = PDC.moments.getMomentImage && PDC.moments.getMomentImage(moment.id);
+      if (!img || !img.complete || !(img.naturalWidth > 0) || !(img.naturalHeight > 0)) return;
+      const maxW = w * 0.7;
+      const maxH = h * 0.7;
+      const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      const dx = (w - dw) / 2;
+      const dy = (h - dh) / 2;
+      const pad = Math.max(6, Math.round(w * 0.008));
+      ctx.fillStyle = "rgba(5, 7, 12, 0.9)";
+      ctx.fillRect(dx - pad, dy - pad, dw + pad * 2, dh + pad * 2);
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx - pad + 1, dy - pad + 1, dw + pad * 2 - 2, dh + pad * 2 - 2);
     }
 
     // Episode title: a prominent centered bar across the top of the stage with

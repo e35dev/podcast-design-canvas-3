@@ -118,6 +118,71 @@ test("moments live on the episode and survive preset and template switches", () 
   assert.equal(JSON.stringify(M.listMoments(ep)), before, "moments unchanged on a custom template");
 });
 
+test("validateMoment for b-roll requires an image (text is not required)", () => {
+  assert.equal(M.validateMoment({ type: "broll", imageName: "broll.png", start: 2, end: 5 }), "");
+  assert.equal(M.validateMoment({ type: "broll", imageName: "broll.png", text: "", start: "0:02", end: "0:05" }), "");
+  assert.match(M.validateMoment({ type: "broll", start: 2, end: 5 }), /image/i);
+  assert.match(M.validateMoment({ type: "broll", imageName: "   ", start: 2, end: 5 }), /image/i);
+  assert.match(M.validateMoment({ type: "broll", imageName: "broll.png", start: "nope", end: 5 }), /start/i);
+  assert.match(M.validateMoment({ type: "broll", imageName: "broll.png", start: 5, end: 2 }), /after/i);
+  // Title/callout still require text — the b-roll rule must not loosen them.
+  assert.match(M.validateMoment({ type: "title", text: "", start: 0, end: 1 }), /text/i);
+});
+
+test("addMoment stores b-roll moments with their imageName", () => {
+  const ep = E.createEpisode({});
+  const b = M.addMoment(ep, { type: "broll", imageName: "  broll.png  ", start: "0:02", end: "0:05" });
+  assert.ok(b && b.id, "valid b-roll moment should be added with an id");
+  assert.equal(b.type, "broll");
+  assert.equal(b.imageName, "broll.png", "imageName should be trimmed");
+  assert.equal(b.start, 2);
+  assert.equal(b.end, 5);
+  assert.equal(M.addMoment(ep, { type: "broll", start: 2, end: 5 }), null, "b-roll without an image is rejected");
+  assert.equal(M.listMoments(ep).length, 1);
+});
+
+test("activeMoments applies the same [start,end) semantics to b-roll", () => {
+  const ep = E.createEpisode({});
+  M.addMoment(ep, { type: "broll", imageName: "broll.png", start: 2, end: 5 });
+  const at = (t) => M.activeMoments(ep, t).map((m) => m.type);
+  assert.deepEqual(at(1), []);
+  assert.deepEqual(at(2), ["broll"], "start boundary inclusive");
+  assert.deepEqual(at(3.5), ["broll"]);
+  assert.deepEqual(at(5), [], "end boundary exclusive");
+  assert.deepEqual(at(6), []);
+});
+
+test("b-roll moments coexist with title/callout activation unchanged", () => {
+  const ep = E.createEpisode({});
+  M.addMoment(ep, { type: "title", text: "EP", start: 0, end: 3 });
+  M.addMoment(ep, { type: "broll", imageName: "broll.png", start: 2, end: 5 });
+  M.addMoment(ep, { type: "callout", text: "REF", start: 4, end: 7 });
+  const at = (t) => M.activeMoments(ep, t).map((m) => m.type);
+  assert.deepEqual(at(1), ["title"]);
+  assert.deepEqual(at(2.5), ["title", "broll"], "overlap keeps both active");
+  assert.deepEqual(at(3.5), ["broll"]);
+  assert.deepEqual(at(4.5), ["broll", "callout"]);
+  assert.deepEqual(at(6), ["callout"]);
+});
+
+test("moment image registry is runtime-only: set/get/clear, cleared on remove", () => {
+  const ep = E.createEpisode({});
+  const b = M.addMoment(ep, { type: "broll", imageName: "broll.png", start: 2, end: 5 });
+  const fakeImage = { src: "blob:fake", naturalWidth: 320, naturalHeight: 240, complete: true };
+  M.setMomentImage(b.id, fakeImage);
+  assert.equal(M.getMomentImage(b.id), fakeImage, "registry returns the stored element");
+  // The image element must never be serialized onto the moment/episode data —
+  // that is what keeps saved templates and storage free of image bytes.
+  assert.equal(JSON.stringify(M.listMoments(ep)).includes("blob:fake"), false);
+  assert.ok(!("image" in b), "moment data carries only imageName, not the element");
+  assert.equal(M.removeMoment(ep, b.id), true);
+  assert.equal(M.getMomentImage(b.id), null, "removing the moment clears its registry entry");
+  M.setMomentImage("moment-x", fakeImage);
+  M.clearMomentImage("moment-x");
+  assert.equal(M.getMomentImage("moment-x"), null);
+  assert.equal(M.getMomentImage("never-set"), null);
+});
+
 test("episodes created before the moments feature still work (lazy list)", () => {
   const ep = E.createEpisode({});
   delete ep.moments; // simulate a pre-feature episode object
