@@ -10,6 +10,10 @@
   function createPreview(canvasEl) {
     const ctx = canvasEl.getContext("2d");
     const videos = {};
+    // Decoded b-roll images, keyed by moment id. Like the speaker <video>
+    // decoders, the pixels live here in the preview (never in the DOM-free
+    // episode model); the model only records that a moment has an image.
+    const momentImages = {};
     const videoHost = document.createElement("div");
     videoHost.setAttribute("aria-hidden", "true");
     videoHost.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none";
@@ -129,6 +133,42 @@
       return v;
     }
 
+    // Attach an uploaded image file to a b-roll moment. The image decodes off a
+    // blob URL (same mechanism as speaker videos) and redraws once ready, so the
+    // overlay appears as soon as playback enters the moment's range.
+    function setMomentImage(momentId, file) {
+      if (!momentId || !file) return;
+      clearMomentImage(momentId);
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      const entry = { img: img, url: url, ready: false };
+      momentImages[momentId] = entry;
+      img.onload = function () {
+        entry.ready = true;
+        drawFrame();
+      };
+      img.onerror = function () {
+        clearMomentImage(momentId);
+      };
+      img.src = url;
+    }
+
+    function clearMomentImage(momentId) {
+      const entry = momentImages[momentId];
+      if (!entry) return;
+      if (entry.url) URL.revokeObjectURL(entry.url);
+      delete momentImages[momentId];
+    }
+
+    function clearMomentImages() {
+      Object.keys(momentImages).forEach(clearMomentImage);
+    }
+
+    function hasMomentImage(momentId) {
+      const entry = momentImages[momentId];
+      return !!(entry && entry.ready);
+    }
+
     function clear(bucket) {
       const v = videos[bucket];
       if (v) {
@@ -216,9 +256,52 @@
       ctx.textBaseline = "middle";
       active.forEach(function (moment) {
         if (moment.type === "title") drawTitleMoment(moment, w, h);
+        else if (moment.type === "broll") drawBrollMoment(moment, w, h);
         else drawCalloutMoment(moment, w, h);
       });
       ctx.restore();
+    }
+
+    // B-roll: the uploaded image over the center of the stage, contain-fitted
+    // inside a framed panel (distinct from the top title bar and the lower-third
+    // callout) so it clearly reads as an inserted visual and is trivially
+    // region-sampled. Drawn only once the image has decoded.
+    function drawBrollMoment(moment, w, h) {
+      const entry = momentImages[moment.id];
+      if (!entry || !entry.ready || !entry.img.naturalWidth) return;
+      const img = entry.img;
+      const boxW = Math.round(w * 0.44);
+      const boxH = Math.round(h * 0.44);
+      const boxX = Math.round((w - boxW) / 2);
+      const boxY = Math.round((h - boxH) / 2);
+      const pad = Math.max(4, Math.round(w * 0.006));
+      // Dark backing + light frame so the panel reads over any speaker layout.
+      ctx.fillStyle = "rgba(5, 7, 12, 0.92)";
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      const innerX = boxX + pad;
+      const innerY = boxY + pad;
+      const innerW = boxW - pad * 2;
+      const innerH = boxH - pad * 2;
+      // Contain-fit the image inside the inner panel, preserving aspect ratio.
+      const scale = Math.min(innerW / img.naturalWidth, innerH / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      const dx = innerX + (innerW - dw) / 2;
+      const dy = innerY + (innerH - dh) / 2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = Math.max(2, Math.round(w * 0.003));
+      ctx.strokeRect(boxX + 1, boxY + 1, boxW - 2, boxH - 2);
+      // Optional caption strip along the bottom of the panel.
+      if (moment.text) {
+        ctx.fillStyle = "rgba(5, 7, 12, 0.82)";
+        const capH = Math.round(h * 0.06);
+        ctx.fillRect(boxX, boxY + boxH - capH, boxW, capH);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "600 " + Math.round(h * 0.032) + "px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(moment.text, boxX + boxW / 2, boxY + boxH - capH / 2, boxW - pad * 4);
+      }
     }
 
     // Episode title: a prominent centered bar across the top of the stage with
@@ -356,6 +439,10 @@
     return {
       setSource,
       clear,
+      setMomentImage,
+      clearMomentImage,
+      clearMomentImages,
+      hasMomentImage,
       render,
       play,
       pause,

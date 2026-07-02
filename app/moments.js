@@ -9,8 +9,8 @@
 (function () {
   const PDC = (window.PDC = window.PDC || {});
 
-  const MOMENT_TYPES = ["title", "callout"];
-  const TYPE_LABELS = { title: "Episode title", callout: "Callout" };
+  const MOMENT_TYPES = ["title", "callout", "broll"];
+  const TYPE_LABELS = { title: "Episode title", callout: "Callout", broll: "B-roll image" };
   let seq = 0;
 
   function ensureMoments(episode) {
@@ -38,12 +38,28 @@
     return m + ":" + String(s).padStart(2, "0");
   }
 
+  // A b-roll moment carries an uploaded image instead of text. The pixels live
+  // in the preview (like the speaker <video> decoders do), so the DOM-free model
+  // only records that an image was chosen (hasImage / imageName); its optional
+  // text is a caption, not a requirement.
+  function isBroll(fields) {
+    return (fields || {}).type === "broll";
+  }
+  function hasImageAsset(fields) {
+    const f = fields || {};
+    return !!(f.hasImage || String(f.imageName == null ? "" : f.imageName).trim());
+  }
+
   // "" when the fields describe a valid moment, otherwise a creator-readable
   // reason. start/end may be raw strings (seconds or M:SS) or numbers.
   function validateMoment(fields) {
     const f = fields || {};
-    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title or callout).";
-    if (!String(f.text == null ? "" : f.text).trim()) return "Enter the text this moment should display.";
+    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title, callout, or b-roll).";
+    if (isBroll(f)) {
+      if (!hasImageAsset(f)) return "Upload an image (PNG) for this b-roll moment.";
+    } else if (!String(f.text == null ? "" : f.text).trim()) {
+      return "Enter the text this moment should display.";
+    }
     const start = parseTime(f.start);
     const end = parseTime(f.end);
     if (!Number.isFinite(start)) return "Enter a valid start time (seconds or M:SS).";
@@ -60,10 +76,11 @@
     const moment = {
       id: "moment-" + ++seq,
       type: fields.type,
-      text: String(fields.text).trim(),
+      text: String(fields.text == null ? "" : fields.text).trim(),
       start: parseTime(fields.start),
       end: parseTime(fields.end),
     };
+    if (isBroll(fields)) moment.imageName = String(fields.imageName == null ? "" : fields.imageName).trim();
     ensureMoments(episode).push(moment);
     return moment;
   }

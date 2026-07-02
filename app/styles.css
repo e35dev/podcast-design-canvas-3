@@ -291,6 +291,10 @@ body {
 }
 .moment-form select { grid-column: span 2; }
 .moment-form #moment-text { grid-column: span 4; }
+.moment-form .moment-image-field { grid-column: span 6; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #9aa4bf; }
+.moment-form .moment-image-field.active span { color: var(--accent); }
+.moment-form .moment-image-field span { white-space: nowrap; }
+.moment-form .moment-image-field input { flex: 1; }
 .moment-form #moment-start,
 .moment-form #moment-end,
 .moment-form #moment-add { grid-column: span 2; }
@@ -340,6 +344,7 @@ body {
 }
 .moment-kind.title { background: rgba(108, 140, 255, 0.55); }
 .moment-kind.callout { background: rgba(138, 108, 255, 0.55); }
+.moment-kind.broll { background: rgba(224, 108, 200, 0.55); }
 .moment-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .moment-range { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .moment-remove {

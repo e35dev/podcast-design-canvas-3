@@ -103,10 +103,10 @@
       li.dataset.momentType = m.type;
       const kind = document.createElement("span");
       kind.className = "moment-kind " + m.type;
-      kind.textContent = m.type === "title" ? "Title" : "Callout";
+      kind.textContent = m.type === "title" ? "Title" : m.type === "broll" ? "B-roll" : "Callout";
       const text = document.createElement("span");
       text.className = "moment-text";
-      text.textContent = m.text;
+      text.textContent = m.type === "broll" ? m.text || m.imageName || "Image" : m.text;
       const range = document.createElement("span");
       range.className = "moment-range";
       range.textContent = M.formatTime(m.start) + "–" + M.formatTime(m.end);
@@ -116,6 +116,7 @@
       remove.textContent = "Remove";
       remove.setAttribute("aria-label", "Remove " + m.type + " moment " + m.text);
       remove.addEventListener("click", function () {
+        if (preview.clearMomentImage) preview.clearMomentImage(m.id);
         M.removeMoment(episode, m.id);
         renderMomentList();
         preview.drawFrame();
@@ -124,23 +125,50 @@
       list.appendChild(li);
     });
   }
+  // B-roll moments carry a PNG upload; the caption text stays optional. The
+  // image field is always available so the order of steps never matters —
+  // picking an image auto-selects the b-roll type, and selecting the b-roll
+  // type highlights the image field. This keeps the upload flow reliable
+  // regardless of whether the creator chooses the type or the file first.
+  const momentImageField = $("moment-image-field");
+  const momentImageInput = $("moment-image");
+  function syncMomentType() {
+    const isBroll = $("moment-type").value === "broll";
+    momentImageField.classList.toggle("active", isBroll);
+    $("moment-text").placeholder = isBroll ? "Caption (optional)" : "Text to display";
+  }
+  $("moment-type").addEventListener("change", syncMomentType);
+  momentImageInput.addEventListener("change", function () {
+    if (momentImageInput.files && momentImageInput.files[0] && $("moment-type").value !== "broll") {
+      $("moment-type").value = "broll";
+    }
+    syncMomentType();
+  });
+  syncMomentType();
+
   $("moment-add").addEventListener("click", function () {
+    const type = $("moment-type").value;
+    const imageFile = type === "broll" ? momentImageInput.files[0] || null : null;
     const fields = {
-      type: $("moment-type").value,
+      type: type,
       text: $("moment-text").value,
       start: $("moment-start").value,
       end: $("moment-end").value,
+      hasImage: !!imageFile,
+      imageName: imageFile ? imageFile.name : "",
     };
     const problem = M.validateMoment(fields);
     if (problem) {
       showMomentError(problem);
       return;
     }
-    M.addMoment(episode, fields);
+    const moment = M.addMoment(episode, fields);
+    if (moment && imageFile && preview.setMomentImage) preview.setMomentImage(moment.id, imageFile);
     showMomentError("");
     $("moment-text").value = "";
     $("moment-start").value = "";
     $("moment-end").value = "";
+    momentImageInput.value = "";
     renderMomentList();
     preview.drawFrame();
   });
@@ -322,6 +350,9 @@
     $("moment-text").value = "";
     $("moment-start").value = "";
     $("moment-end").value = "";
+    if (momentImageInput) momentImageInput.value = "";
+    if (preview.clearMomentImages) preview.clearMomentImages();
+    syncMomentType();
     showMomentError("");
     renderMomentList();
 

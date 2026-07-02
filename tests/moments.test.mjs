@@ -46,6 +46,44 @@ test("validateMoment requires a type, nonempty text, and 0 <= start < end", () =
   assert.match(M.validateMoment({ type: "title", text: "x", start: 5, end: 2 }), /after/i);
 });
 
+test("broll moments require an image asset, not text, and keep time validation", () => {
+  assert.ok(M.MOMENT_TYPES.includes("broll"), "broll should be a supported moment type");
+  // Valid: image chosen (hasImage), no text needed.
+  assert.equal(M.validateMoment({ type: "broll", hasImage: true, start: "0:02", end: "0:05" }), "");
+  // Valid: imageName present is also proof an image was chosen.
+  assert.equal(M.validateMoment({ type: "broll", imageName: "clip.png", start: 2, end: 5 }), "");
+  // Missing image -> image-specific error (NOT the text error).
+  assert.match(M.validateMoment({ type: "broll", start: 2, end: 5 }), /image/i);
+  // Time rules still apply to b-roll.
+  assert.match(M.validateMoment({ type: "broll", hasImage: true, start: 5, end: 2 }), /after/i);
+  assert.match(M.validateMoment({ type: "broll", hasImage: true, start: "nope", end: 5 }), /start/i);
+});
+
+test("addMoment stores a broll moment with its image name and optional caption", () => {
+  const ep = E.createEpisode({});
+  const broll = M.addMoment(ep, { type: "broll", text: "  Chart  ", hasImage: true, imageName: "chart.png", start: "0:02", end: "0:05" });
+  assert.ok(broll && broll.id, "valid b-roll moment should be added");
+  assert.equal(broll.type, "broll");
+  assert.equal(broll.imageName, "chart.png");
+  assert.equal(broll.text, "Chart", "optional caption is trimmed");
+  assert.equal(broll.start, 2);
+  assert.equal(broll.end, 5);
+  const noCaption = M.addMoment(ep, { type: "broll", hasImage: true, imageName: "b.png", start: 6, end: 8 });
+  assert.equal(noCaption.text, "", "b-roll caption is optional");
+  assert.equal(M.addMoment(ep, { type: "broll", start: 1, end: 2 }), null, "b-roll without an image is rejected");
+  assert.equal(M.listMoments(ep).length, 2);
+});
+
+test("broll moments schedule with the same [start, end) activation as other moments", () => {
+  const ep = E.createEpisode({});
+  M.addMoment(ep, { type: "broll", hasImage: true, imageName: "b.png", start: 2, end: 5 });
+  const types = (t) => M.activeMoments(ep, t).map((m) => m.type);
+  assert.deepEqual(types(1.9), []);
+  assert.deepEqual(types(2), ["broll"], "start boundary inclusive");
+  assert.deepEqual(types(4.9), ["broll"]);
+  assert.deepEqual(types(5), [], "end boundary exclusive");
+});
+
 test("addMoment stores valid moments on the episode and rejects invalid ones", () => {
   const ep = E.createEpisode({});
   const title = M.addMoment(ep, { type: "title", text: "  EP TITLE  ", start: "0:00", end: "0:03" });
