@@ -63,7 +63,7 @@
   // each element's cached tap and rewiring its gain to this export's destination.
   async function mixSpeakerAudio(vids) {
     const ctx = await ensureMixContext();
-    if (!ctx || !vids.length) return { tracks: [], cleanup: function () {} };
+    if (!ctx || !vids.length) return { tracks: [], connectedCount: 0, cleanup: function () {} };
     const dest = ctx.createMediaStreamDestination();
     const gainValue = 1 / Math.max(1, vids.length);
     let connected = 0;
@@ -79,10 +79,11 @@
     }
     if (!connected) {
       dest.stream.getTracks().forEach(function (track) { track.stop(); });
-      return { tracks: [], cleanup: function () {} };
+      return { tracks: [], connectedCount: 0, cleanup: function () {} };
     }
     return {
       tracks: dest.stream.getAudioTracks(),
+      connectedCount: connected,
       cleanup: function () {
         connectedTaps.forEach(function (tap) {
           try { tap.gain.disconnect(); } catch (e) {}
@@ -107,6 +108,10 @@
     // and reused, so a second export in the same session still carries audio.
     const mixedAudio = await mixSpeakerAudio(vids);
     const audioTracks = mixedAudio.tracks;
+    if (vids.length && (!audioTracks.length || mixedAudio.connectedCount !== vids.length)) {
+      mixedAudio.cleanup();
+      throw new Error("Every speaker's audio must be captured before export can finish.");
+    }
 
     // A muted <video> feeds SILENCE into its Web Audio tap, and the preview keeps
     // its speakers muted, so unmute the tapped speakers just for the capture. Each
