@@ -141,6 +141,15 @@
     function drawFrame() {
       if (!episodeRef) return;
       const buckets = PDC.episode.assignedBuckets(episodeRef);
+      if (!buckets.length) {
+        // No composable speakers yet: paint the empty stage. The persistent
+        // loop keeps ticking so the first upload starts compositing at once.
+        ctx.fillStyle = "#05070c";
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+        canvasEl.dataset.preset = "";
+        canvasEl.dataset.speakers = "0";
+        return;
+      }
       const rects = PDC.templates
         ? PDC.templates.resolveLayout(episodeRef, buckets.length)
         : (getPreset(episodeRef.presetId) || PDC.presets.PRESETS[0]).layout(buckets.length);
@@ -216,9 +225,36 @@
       ctx.textBaseline = "middle";
       active.forEach(function (moment) {
         if (moment.type === "title") drawTitleMoment(moment, w, h);
+        else if (moment.type === "broll") drawBrollMoment(moment, w, h);
         else drawCalloutMoment(moment, w, h);
       });
       ctx.restore();
+    }
+
+    // B-roll image: the decoded upload drawn as a large centered inset (~70%
+    // of the stage) over the composed speakers, aspect-preserved, with a dark
+    // backing pad and light border so it clearly reads as an overlay rather
+    // than a speaker feed. The image element lives in the moments runtime
+    // registry (never in storage); until it has decoded we simply skip the
+    // draw — the composition below stays intact and the image appears on the
+    // first frame after decode.
+    function drawBrollMoment(moment, w, h) {
+      const img = PDC.moments.getMomentImage && PDC.moments.getMomentImage(moment.id);
+      if (!img || !img.complete || !(img.naturalWidth > 0) || !(img.naturalHeight > 0)) return;
+      const maxW = w * 0.7;
+      const maxH = h * 0.7;
+      const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      const dx = (w - dw) / 2;
+      const dy = (h - dh) / 2;
+      const pad = Math.max(6, Math.round(w * 0.008));
+      ctx.fillStyle = "rgba(5, 7, 12, 0.9)";
+      ctx.fillRect(dx - pad, dy - pad, dw + pad * 2, dh + pad * 2);
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx - pad + 1, dy - pad + 1, dw + pad * 2 - 2, dh + pad * 2 - 2);
     }
 
     // Episode title: a prominent centered bar across the top of the stage with
@@ -259,6 +295,12 @@
       ctx.fillText(moment.text, barX + edgeW + padX, barY + barH / 2, maxTextW);
     }
 
+    // The stage repaints on a persistent rAF loop that runs for the lifetime
+    // of the preview — playing OR paused, never stopped. Paused <video>
+    // elements hold their seeked frame, so drawing them is correct, and any
+    // scrub/seek or moment change appears on the paused canvas immediately:
+    // a screenshot of a paused, scrubbed preview always shows the true
+    // composition (speakers plus every active timed moment).
     function loop() {
       syncReferenceTime();
       drawFrame();
@@ -269,26 +311,11 @@
       if (!rafId) rafId = requestAnimationFrame(loop);
     }
 
-    function stopLoop() {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-        rafId = 0;
-      }
-    }
-
     function render(episode) {
       episodeRef = episode;
-      const buckets = PDC.episode.assignedBuckets(episode);
-      if (buckets.length) ensureLoop();
-      else {
-        stopLoop();
-        ctx.fillStyle = "#05070c";
-        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
-        canvasEl.dataset.preset = "";
-        canvasEl.dataset.speakers = "0";
-      }
+      ensureLoop();
       drawFrame();
-      return buckets.length;
+      return PDC.episode.assignedBuckets(episode).length;
     }
 
     function play() {
@@ -310,6 +337,9 @@
       Object.keys(videos).forEach(function (b) {
         videos[b].pause();
       });
+      // Explicit repaint at the paused position (the loop keeps repainting
+      // afterwards) so the canvas reflects the pause instant immediately.
+      drawFrame();
     }
 
     function restart() {
@@ -352,6 +382,10 @@
       seekAll(t);
       drawFrame();
     }
+
+    // Start compositing immediately: the loop no-ops until an episode is
+    // rendered, then keeps the canvas continuously redrawn from then on.
+    ensureLoop();
 
     return {
       setSource,

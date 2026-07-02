@@ -212,10 +212,51 @@
     );
   }
 
+  // After the bounded re-seek + play() above, playback does not necessarily
+  // progress right away: on a slow machine the first decoded frame can land
+  // hundreds of ms after play() resolves — and conversely, recorder start-up
+  // can lag while the media races ahead. Either way exported-file time and
+  // media time drift apart and timed visual moments burn in at the wrong
+  // exported timestamps. So wait (HARD-BOUNDED) until every speaker is
+  // verifiably progressing — currentTime past a small epsilon AND strictly
+  // increasing across samples — and only then start recording. If media never
+  // progresses inside the budget we proceed anyway — export must never hang.
+  async function waitForPlaybackProgress(vids, budgetMs) {
+    if (!vids.length) return;
+    const deadline = performance.now() + (budgetMs || 2000);
+    let last = vids.map(function (v) { return v.currentTime; });
+    while (performance.now() < deadline) {
+      await sleep(40);
+      const now = vids.map(function (v) { return v.currentTime; });
+      if (now.every(function (t, i) { return t > 0.03 && t > last[i]; })) return;
+      last = now;
+    }
+  }
+
+  // One repaint of the persistent preview loop (double rAF, hard-bounded by a
+  // timer): guarantees the canvas feeding captureStream has actually drawn a
+  // frame of the restarted timeline before recording begins.
+  function waitForNextPaint() {
+    return new Promise(function (resolve) {
+      let done = false;
+      function fin() { if (done) return; done = true; resolve(); }
+      try {
+        requestAnimationFrame(function () { requestAnimationFrame(fin); });
+      } catch (e) { fin(); }
+      setTimeout(fin, 350);
+    });
+  }
+
   // Record the live canvas (and mixed speaker audio) into a downloadable Blob.
   async function exportEpisode(canvasEl, opts) {
     opts = opts || {};
     const fps = opts.fps || 30;
+    // Per-export telemetry, exposed as PDC.exporter.lastDiagnostics so the
+    // rendered verification scripts can embed real environment numbers
+    // (recorder start-up latency etc.) in any failure message. Read-only
+    // diagnostics — no product behavior keys off it.
+    const exportDiag = { recorderStartToCaptureMs: null, mediaDriftAtCaptureMs: null, reseekOnStart: false };
+    PDC.exporter.lastDiagnostics = exportDiag;
     const vids = speakerVideos();
     const longest = vids.reduce((m, v) => (isFinite(v.duration) && v.duration > m ? v.duration : m), 0);
     // Export the FULL composition: one complete pass of the longest speaker
@@ -244,10 +285,11 @@
     let combined = null;
     let recorder = null;
     try {
-      // Audio-mix setup above takes real time while the speakers keep playing;
-      // restart them from 0 (bounded) so the capture covers the episode from
-      // the top and scheduled visual moments land at their scheduled times.
-      await alignSpeakersToStart(vids);
+      // Build the whole recording pipeline BEFORE re-aligning playback, so
+      // that once the speakers are verifiably rolling from 0 the ONLY step
+      // left is recorder.start() — no setup work (captureStream, recorder
+      // construction) can widen the gap between media time and recorded time
+      // on a slow machine.
       const canvasStream = canvasEl.captureStream(fps);
       combined = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
       const mimeType = pickMimeType();
@@ -256,12 +298,76 @@
       recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
       const stopped = new Promise((resolve) => (recorder.onstop = resolve));
 
+      // Audio-mix setup above takes real time while the speakers keep playing;
+      // restart them from 0 (bounded) so the capture covers the episode from
+      // the top and scheduled visual moments land at their scheduled times.
+      await alignSpeakersToStart(vids);
+      // Gate recorder.start() on real playback progress plus one painted
+      // canvas frame of the restarted timeline (both waits hard-bounded), so
+      // exported-file time tracks media time regardless of machine speed.
+      await waitForPlaybackProgress(vids, 2000);
+      await waitForNextPaint();
+
+      // Even with the progress-gated start above, exported-file time can
+      // still drift from media time in two machine-dependent ways:
+      //   (a) the recorder anchors its timeline at the start() call while the
+      //       media has already progressed a little past 0 (the gate lets it
+      //       reach ~0.05-0.65s), and
+      //   (b) on a slow machine, recorder/captureStream initialization takes
+      //       1-2s AFTER start() while the media keeps playing at speed, so
+      //       the first frame that actually lands in the file corresponds to
+      //       media t≈1-2s — and every timed visual moment burns in that much
+      //       early in exported time.
+      // Both are handled without ever waiting on anything:
+      //   - Immediately after start() returns (same synchronous task — no
+      //     event can precede it), snap every speaker back to 0. That zeroes
+      //     drift (a) on machines whose recorder anchors at the start() call.
+      //   - When onstart fires ("recording has begun"), measure how far the
+      //     media ran during recorder start-up. A small run (<1s) is normal
+      //     event-dispatch lag on a machine that anchored at start(); a
+      //     re-seek THERE would itself shift moments late by that lag, so we
+      //     leave it alone. A large run (>=1s) means capture truly began
+      //     late (case b): snap the speakers back to 0 so recorded time
+      //     tracks media time from ~0.
+      // The preview's persistent draw loop re-derives its reference time
+      // from the media elements, so burned-in moments follow every re-seek;
+      // opts.onCaptureStart additionally lets the host page re-anchor its
+      // preview clock on the same frame. The onstart handler is passive and
+      // fully try/caught — it can never hang or fail an export, and if
+      // onstart never fires the flow proceeds exactly as before.
+      const LATE_CAPTURE_DRIFT_S = 1.0;
+      const reseekSpeakersToZero = function () {
+        for (const v of vids) {
+          try { v.currentTime = 0; } catch (e) {}
+        }
+        try {
+          if (typeof opts.onCaptureStart === "function") opts.onCaptureStart();
+        } catch (e) { /* host hook must never break an export */ }
+      };
+      const startCalledAt = performance.now();
+      let recordingBase = startCalledAt;
+      recorder.onstart = function () {
+        exportDiag.recorderStartToCaptureMs = Math.round(performance.now() - startCalledAt);
+        // Time the recording window from the reported capture start so the
+        // file still covers one full media pass even when start-up lagged.
+        recordingBase = performance.now();
+        try {
+          const drift = vids.reduce(function (m, v) {
+            return Number.isFinite(v.currentTime) && v.currentTime > m ? v.currentTime : m;
+          }, 0);
+          exportDiag.mediaDriftAtCaptureMs = Math.round(drift * 1000);
+          if (drift >= LATE_CAPTURE_DRIFT_S) {
+            reseekSpeakersToZero();
+            exportDiag.reseekOnStart = true;
+          }
+        } catch (e) { /* diagnostics/re-seek must never break an export */ }
+      };
       recorder.start(200);
-      const started = performance.now();
+      reseekSpeakersToZero();
       const onProgress = opts.onProgress || function () {};
       await new Promise((resolve) => {
         const timer = setInterval(() => {
-          const elapsed = (performance.now() - started) / 1000;
+          const elapsed = (performance.now() - recordingBase) / 1000;
           onProgress(Math.min(1, elapsed / recordSeconds));
           if (elapsed >= recordSeconds) { clearInterval(timer); resolve(); }
         }, 100);
@@ -294,5 +400,5 @@
     a.remove();
   }
 
-  PDC.exporter = { exportEpisode, download, pickMimeType };
+  PDC.exporter = { exportEpisode, download, pickMimeType, lastDiagnostics: null };
 })();

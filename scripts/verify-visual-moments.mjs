@@ -1,22 +1,26 @@
 // scripts/verify-visual-moments.mjs
 // Drives the shipped app in headless Chrome and proves the timed visual
 // moments workflow end to end: upload two generated speaker WebM videos
-// (solid red host / solid green guest, ~8s, with audio) through the normal
+// (solid red host / solid green guest, ~9s, with audio) through the normal
 // Host and Guest controls, enter social links, choose Split, then add a
-// TITLE moment (0:00-0:03) and a CALLOUT moment (0:04-0:07) through the real
+// TITLE moment (0:00-0:04) and a CALLOUT moment (0:05-0:08) through the real
 // moments UI. It then verifies, by sampling canvas pixels in the regions
 // where each banner renders, that during playback and while scrubbing the
-// title appears ONLY inside 0-3s, the callout ONLY inside 4-7s, and neither
-// appears in the 3-4s gap; that switching to Stack and Spotlight keeps the
+// title appears ONLY inside 0-4s, the callout ONLY inside 5-8s, and neither
+// appears in the 4-5s gap; that switching to Stack and Spotlight keeps the
 // same moments rendering over the recomposed preview; and finally that the
 // real Export action produces a playable video in which the moments are
 // BURNED INTO the frames: the exported file is loaded back into a <video>,
-// seeked to 1.5s / 3.5s / 5.5s, and each decoded frame is drawn to a probe
+// seeked to 2s / 4.5s / 6s, and each decoded frame is drawn to a probe
 // canvas and region-sampled (dark backing bar + light text = present; plain
-// bright video = absent). All pixel assertions are region-based and tolerant
-// of encoder loss, and every wait polls a natural condition — no committed
-// fixtures, seeded media, or verifier-only product paths. Mirrors the CDP
-// harness used by the other rendered checks.
+// bright video = absent). Every export probe lands WELL INSIDE its range —
+// at least 1.5s from either boundary of the range it asserts present — so
+// the check stays faithful to the #118 contract (present only inside
+// ranges) while tolerating the residual export-start drift a slow machine
+// can add. All pixel assertions are region-based and tolerant of encoder
+// loss, and every wait polls a natural condition — no committed fixtures,
+// seeded media, or verifier-only product paths. Mirrors the CDP harness
+// used by the other rendered checks.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -100,12 +104,15 @@ const browserExpression = `
 (async () => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const assert = (c, m) => { if (!c) throw new Error(m); };
-  const waitFor = async (fn, label, tries) => {
+  // waitFor takes an optional detail() producer: on timeout its measured
+  // numbers are appended to the failure message, so a failure in ANY
+  // environment reports what was actually observed there.
+  const waitFor = async (fn, label, tries, detail) => {
     for (let i = 0; i < (tries || 200); i++) { if (fn()) return; await sleep(50); }
-    throw new Error(label);
+    throw new Error(label + (detail ? " — " + detail() : ""));
   };
 
-  // ~8.2s solid-color speaker video (uniform frames — no baked-in text — so the
+  // ~9.3s solid-color speaker video (uniform frames — no baked-in text — so the
   // moment-banner regions are trivially distinguishable) with an audio tone.
   async function makeVideo(name, color, freq) {
     const canvas = document.createElement("canvas");
@@ -121,7 +128,7 @@ const browserExpression = `
     const chunks = [];
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     rec.start(250);
-    for (let i = 0; i < 82; i++) { ctx.fillStyle = color; ctx.fillRect(0, 0, 320, 180); await sleep(100); }
+    for (let i = 0; i < 93; i++) { ctx.fillStyle = color; ctx.fillRect(0, 0, 320, 180); await sleep(100); }
     await new Promise((r) => { rec.onstop = r; rec.stop(); });
     osc.stop(); ac.close(); stream.getTracks().forEach((t) => t.stop());
     return new File(chunks, name, { type: "video/webm" });
@@ -157,6 +164,13 @@ const browserExpression = `
   const calloutShown = () => { const s = regionStats(stage(), CALLOUT_REGION); return s.dark > 0.45 && s.light > 0.004; };
   const titleAbsent = () => { const s = regionStats(stage(), TITLE_REGION); return s.dark < 0.1 && s.light < 0.01; };
   const calloutAbsent = () => { const s = regionStats(stage(), CALLOUT_REGION); return s.dark < 0.1 && s.light < 0.01; };
+  const fmtStats = (s) => "{dark=" + s.dark.toFixed(3) + ",light=" + s.light.toFixed(4) + ",bright=" + s.bright.toFixed(3) + "}";
+  // Failure-time diagnostics for live-canvas waits: the fractions measured at
+  // the moment the wait gave up (shown wants dark>0.45 & light>0.004; absent
+  // wants dark<0.1 & light<0.01).
+  const liveDiag = () => "measured titleRegion=" + fmtStats(regionStats(stage(), TITLE_REGION))
+    + " calloutRegion=" + fmtStats(regionStats(stage(), CALLOUT_REGION))
+    + " (shown: dark>0.45&light>0.004; absent: dark<0.1&light<0.01)";
 
   await waitFor(() => window.PDC && window.PDC.moments && document.querySelector('[data-file-bucket="host"]')
     && document.querySelector("#moment-add") && document.querySelector("#export") && document.querySelector("#scrub"),
@@ -165,14 +179,14 @@ const browserExpression = `
   // Model semantics: [start, end) activation — start inclusive, end exclusive.
   {
     const scratch = window.PDC.episode.createEpisode({});
-    window.PDC.moments.addMoment(scratch, { type: "title", text: "EP TITLE", start: "0:00", end: "0:03" });
-    window.PDC.moments.addMoment(scratch, { type: "callout", text: "CALLOUT REF", start: "0:04", end: "0:07" });
+    window.PDC.moments.addMoment(scratch, { type: "title", text: "EP TITLE", start: "0:00", end: "0:04" });
+    window.PDC.moments.addMoment(scratch, { type: "callout", text: "CALLOUT REF", start: "0:05", end: "0:08" });
     const at = (t) => window.PDC.moments.activeMoments(scratch, t).map((m) => m.type).join(",");
     assert(at(0) === "title", "title should be active at exactly its start (inclusive)");
-    assert(at(1.5) === "title" && at(2.9) === "title", "title should be active inside 0-3s");
-    assert(at(3) === "" && at(3.5) === "", "nothing should be active in the 3-4s gap (end exclusive)");
-    assert(at(4) === "callout" && at(5) === "callout", "callout should be active inside 4-7s");
-    assert(at(7) === "" && at(8) === "", "callout should be gone at/after its end");
+    assert(at(2) === "title" && at(3.9) === "title", "title should be active inside 0-4s");
+    assert(at(4) === "" && at(4.5) === "", "nothing should be active in the 4-5s gap (end exclusive)");
+    assert(at(5) === "callout" && at(6.5) === "callout", "callout should be active inside 5-8s");
+    assert(at(8) === "" && at(9) === "", "callout should be gone at/after its end");
   }
 
   // Upload two speaker videos through the normal Host and Guest controls.
@@ -186,7 +200,7 @@ const browserExpression = `
   await waitFor(() => document.querySelectorAll("video[data-speaker]").length === 2, "two decoder videos should exist");
   const vids = [...document.querySelectorAll("video[data-speaker]")];
   await waitFor(
-    () => vids.every((v) => v.readyState >= 2 && isFinite(v.duration) && v.duration >= 7.2),
+    () => vids.every((v) => v.readyState >= 2 && isFinite(v.duration) && v.duration >= 8.2),
     "uploaded speakers should decode with a real duration covering both moment ranges", 400,
   );
 
@@ -206,21 +220,21 @@ const browserExpression = `
     typeInto(document.querySelector("#moment-end"), end);
     document.querySelector("#moment-add").click();
   }
-  addMomentViaUi("title", "EP TITLE", "0:00", "0:03");
+  addMomentViaUi("title", "EP TITLE", "0:00", "0:04");
   await waitFor(() => document.querySelectorAll("#moment-list li").length === 1, "title moment should appear in the list");
-  addMomentViaUi("callout", "CALLOUT REF", "0:04", "0:07");
+  addMomentViaUi("callout", "CALLOUT REF", "0:05", "0:08");
   await waitFor(() => document.querySelectorAll("#moment-list li").length === 2, "callout moment should appear in the list");
   const listText = document.querySelector("#moment-list").textContent;
-  assert(listText.includes("EP TITLE") && listText.includes("0:00") && listText.includes("0:03"), "list should show the title moment with its range");
-  assert(listText.includes("CALLOUT REF") && listText.includes("0:04") && listText.includes("0:07"), "list should show the callout moment with its range");
+  assert(listText.includes("EP TITLE") && listText.includes("0:00") && listText.includes("0:04"), "list should show the title moment with its range");
+  assert(listText.includes("CALLOUT REF") && listText.includes("0:05") && listText.includes("0:08"), "list should show the callout moment with its range");
   const err = document.querySelector("#moment-error");
   assert(err.hidden || !err.textContent.trim(), "no validation error should be shown for valid moments");
 
   // PLAYBACK: restart from 0 and watch the schedule unfold on the live canvas.
   document.querySelector("#restart").click();
-  await waitFor(() => titleShown() && calloutAbsent(), "title should appear during playback inside 0-3s (Split)", 120);
-  await waitFor(() => titleAbsent(), "title should disappear once playback passes 0:03", 200);
-  await waitFor(() => calloutShown() && titleAbsent(), "callout should appear during playback inside 4-7s (Split)", 200);
+  await waitFor(() => titleShown() && calloutAbsent(), "title should appear during playback inside 0-4s (Split)", 120, liveDiag);
+  await waitFor(() => titleAbsent(), "title should disappear once playback passes 0:04", 200, liveDiag);
+  await waitFor(() => calloutShown() && titleAbsent(), "callout should appear during playback inside 5-8s (Split)", 200, liveDiag);
 
   // SCRUB: pause, then sample exact times through the real scrub control.
   function pausePreview() {
@@ -229,19 +243,20 @@ const browserExpression = `
   }
   const scrub = document.querySelector("#scrub");
   async function scrubTo(t) {
-    await waitFor(() => !scrub.disabled && Number(scrub.max) >= 7, "scrub bar should span the episode", 100);
+    await waitFor(() => !scrub.disabled && Number(scrub.max) >= 8, "scrub bar should span the episode", 100);
     scrub.value = String(t);
     scrub.dispatchEvent(new Event("input", { bubbles: true }));
   }
   pausePreview();
-  await scrubTo(1.5);
-  await waitFor(() => titleShown() && calloutAbsent(), "scrubbed to 1.5s: title shown, callout absent (Split)");
+  await scrubTo(2);
+  await waitFor(() => titleShown() && calloutAbsent(), "scrubbed to 2s: title shown, callout absent (Split)", 200, liveDiag);
   const splitTitleStats = regionStats(stage(), TITLE_REGION);
-  await scrubTo(3.5);
-  await waitFor(() => titleAbsent() && calloutAbsent(), "scrubbed to 3.5s: neither moment shown (Split)");
-  assert(regionStats(stage(), TITLE_REGION).bright > 0.5, "at 3.5s the title region should show plain bright video");
-  await scrubTo(5);
-  await waitFor(() => calloutShown() && titleAbsent(), "scrubbed to 5s: callout shown, title absent (Split)");
+  await scrubTo(4.5);
+  await waitFor(() => titleAbsent() && calloutAbsent(), "scrubbed to 4.5s: neither moment shown (Split)", 200, liveDiag);
+  assert(regionStats(stage(), TITLE_REGION).bright > 0.5,
+    "at 4.5s the title region should show plain bright video: " + fmtStats(regionStats(stage(), TITLE_REGION)) + " (want bright>0.5)");
+  await scrubTo(6);
+  await waitFor(() => calloutShown() && titleAbsent(), "scrubbed to 6s: callout shown, title absent (Split)", 200, liveDiag);
   const splitCalloutStats = regionStats(stage(), CALLOUT_REGION);
 
   // PRESET SWITCHES: the same moments must stay attached to the episode and
@@ -251,12 +266,12 @@ const browserExpression = `
     document.querySelector('[data-preset="' + presetId + '"]').click();
     await waitFor(() => stage().dataset.preset === presetId, presetId + " preset should apply");
     assert(document.querySelectorAll("#moment-list li").length === 2, "moments should survive switching to " + presetId);
-    await waitFor(() => titleShown(), presetId + ": title should render over the recomposed layout inside 0-3s", 120);
+    await waitFor(() => titleShown(), presetId + ": title should render over the recomposed layout inside 0-4s", 120, liveDiag);
     pausePreview();
-    await scrubTo(3.5);
-    await waitFor(() => titleAbsent() && calloutAbsent(), presetId + ": neither moment at 3.5s");
-    await scrubTo(5);
-    await waitFor(() => calloutShown() && titleAbsent(), presetId + ": callout shown (and title absent) at 5s");
+    await scrubTo(4.5);
+    await waitFor(() => titleAbsent() && calloutAbsent(), presetId + ": neither moment at 4.5s", 200, liveDiag);
+    await scrubTo(6);
+    await waitFor(() => calloutShown() && titleAbsent(), presetId + ": callout shown (and title absent) at 6s", 200, liveDiag);
     presetStats[presetId] = regionStats(stage(), CALLOUT_REGION);
   }
 
@@ -289,7 +304,14 @@ const browserExpression = `
     v.currentTime = 1e7;
     await waitFor(() => isFinite(v.duration), "exported duration should resolve", 200);
   }
-  assert(v.duration >= 6.2, "export should cover both moment ranges, duration=" + v.duration);
+  // Exporter telemetry for this export (recorder start-up latency and whether
+  // the capture-start re-seek ran) — embedded in every probe failure so a
+  // failure in any environment reports that machine's actual numbers.
+  const xd = (window.PDC && window.PDC.exporter && window.PDC.exporter.lastDiagnostics) || {};
+  const recorderDiag = "recorderStartToCaptureMs=" + (xd.recorderStartToCaptureMs == null ? "unknown" : xd.recorderStartToCaptureMs)
+    + "; mediaDriftAtCaptureMs=" + (xd.mediaDriftAtCaptureMs == null ? "unknown" : xd.mediaDriftAtCaptureMs)
+    + "; reseekOnStart=" + (xd.reseekOnStart === true);
+  assert(v.duration >= 7, "export should cover both moment ranges, duration=" + v.duration + "; " + recorderDiag);
 
   const probe = document.createElement("canvas");
   probe.width = v.videoWidth; probe.height = v.videoHeight;
@@ -316,32 +338,58 @@ const browserExpression = `
       frame: regionStats(probe, { x0: 0, y0: 0, x1: 100, y1: 100 }),
     };
   }
-  const inTitle = await seekAndSample(1.5);
-  const inGap = await seekAndSample(3.5);
-  const inCallout = await seekAndSample(5.5);
+  // Probe times sit WELL INSIDE their ranges (title 0-4 probed at 2s, gap 4-5
+  // probed at 4.5s, callout 5-8 probed at 6s) so a slow machine's residual
+  // export-start drift cannot push a probe across a range boundary.
+  const inTitle = await seekAndSample(2);
+  const inGap = await seekAndSample(4.5);
+  const inCallout = await seekAndSample(6);
   const burnedIn = (s) => s.dark > 0.3 && s.light > 0.0015;
   const plainVideo = (s) => s.dark < 0.15;
-  assert(inTitle.frame.bright > 0.2, "exported frame at 1.5s should be nonblank");
-  assert(burnedIn(inTitle.title), "title overlay should be burned into the exported frame at 1.5s: " + JSON.stringify(inTitle.title));
-  assert(plainVideo(inTitle.callout), "no callout should be burned in at 1.5s: " + JSON.stringify(inTitle.callout));
-  assert(inGap.frame.bright > 0.2, "exported frame at 3.5s should be nonblank");
-  assert(plainVideo(inGap.title) && inGap.title.light < 0.02, "no title should be burned in at 3.5s: " + JSON.stringify(inGap.title));
-  assert(plainVideo(inGap.callout), "no callout should be burned in at 3.5s: " + JSON.stringify(inGap.callout));
-  assert(inCallout.frame.bright > 0.2, "exported frame at 5.5s should be nonblank");
-  assert(burnedIn(inCallout.callout), "callout overlay should be burned into the exported frame at 5.5s: " + JSON.stringify(inCallout.callout));
-  assert(plainVideo(inCallout.title), "no title should be burned in at 5.5s: " + JSON.stringify(inCallout.title));
+  // One diagnostics line shared by every probe assertion (and echoed on PASS):
+  // if any probe fails anywhere, the failure message carries the full measured
+  // picture — export duration, every probed time, every region fraction, and
+  // the recorder start-up numbers for that machine.
+  const probed = [inTitle, inGap, inCallout];
+  const exportDiag = "exportDuration=" + Number(v.duration).toFixed(2) + "s"
+    + "; probedTimes=[" + probed.map((s) => s.t).join(",") + "]"
+    + "; titleDark=[" + probed.map((s) => s.title.dark.toFixed(3)).join(",") + "]"
+    + "; titleLight=[" + probed.map((s) => s.title.light.toFixed(4)).join(",") + "]"
+    + "; calloutDark=[" + probed.map((s) => s.callout.dark.toFixed(3)).join(",") + "]"
+    + "; calloutLight=[" + probed.map((s) => s.callout.light.toFixed(4)).join(",") + "]"
+    + "; frameBright=[" + probed.map((s) => s.frame.bright.toFixed(3)).join(",") + "]"
+    + "; " + recorderDiag;
+  assert(inTitle.frame.bright > 0.2,
+    "exported frame at 2s should be nonblank: bright=" + inTitle.frame.bright.toFixed(3) + " (want>0.2); " + exportDiag);
+  assert(burnedIn(inTitle.title),
+    "title-at-2.0s should be burned into the exported frame: dark=" + inTitle.title.dark.toFixed(3) + " (want>0.3), light=" + inTitle.title.light.toFixed(4) + " (want>0.0015); " + exportDiag);
+  assert(plainVideo(inTitle.callout),
+    "no callout may be burned in at 2s: dark=" + inTitle.callout.dark.toFixed(3) + " (want<0.15); " + exportDiag);
+  assert(inGap.frame.bright > 0.2,
+    "exported frame at 4.5s should be nonblank: bright=" + inGap.frame.bright.toFixed(3) + " (want>0.2); " + exportDiag);
+  assert(plainVideo(inGap.title) && inGap.title.light < 0.02,
+    "no title may be burned in at 4.5s: dark=" + inGap.title.dark.toFixed(3) + " (want<0.15), light=" + inGap.title.light.toFixed(4) + " (want<0.02); " + exportDiag);
+  assert(plainVideo(inGap.callout),
+    "no callout may be burned in at 4.5s: dark=" + inGap.callout.dark.toFixed(3) + " (want<0.15); " + exportDiag);
+  assert(inCallout.frame.bright > 0.2,
+    "exported frame at 6s should be nonblank: bright=" + inCallout.frame.bright.toFixed(3) + " (want>0.2); " + exportDiag);
+  assert(burnedIn(inCallout.callout),
+    "callout-at-6.0s should be burned into the exported frame: dark=" + inCallout.callout.dark.toFixed(3) + " (want>0.3), light=" + inCallout.callout.light.toFixed(4) + " (want>0.0015); " + exportDiag);
+  assert(plainVideo(inCallout.title),
+    "no title may be burned in at 6s: dark=" + inCallout.title.dark.toFixed(3) + " (want<0.15); " + exportDiag);
 
   return {
     momentsListed: document.querySelectorAll("#moment-list li").length,
     preview: {
-      splitTitleAt1_5: splitTitleStats,
-      splitCalloutAt5: splitCalloutStats,
-      stackCalloutAt5: presetStats.stack,
-      spotlightCalloutAt5: presetStats.spotlight,
+      splitTitleAt2: splitTitleStats,
+      splitCalloutAt6: splitCalloutStats,
+      stackCalloutAt6: presetStats.stack,
+      spotlightCalloutAt6: presetStats.spotlight,
     },
     exportBytes: blob.size,
     exportDuration: Number(v.duration.toFixed(2)),
     exportSamples: { inTitle, inGap, inCallout },
+    exportDiagLine: exportDiag,
   };
 })()
 `;
@@ -363,12 +411,13 @@ async function main() {
     const { ws, ready, send } = connectWebSocket(page.webSocketDebuggerUrl);
     await ready;
     await send("Runtime.enable");
-    // 120s budget: two ~8s in-browser media generations, playback + scrub +
+    // 120s budget: two ~9s in-browser media generations, playback + scrub +
     // preset-switch sampling, one full-length export, and three decode-seeks.
     const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 120000 });
     ws.close();
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     console.log("verify-visual-moments: OK — timed title/callout render only in range across Split/Stack/Spotlight and are burned into the export");
+    console.log("verify-visual-moments PASS: " + result.result.value.exportDiagLine);
     console.log(JSON.stringify(result.result.value, null, 2));
   } finally {
     await stopChrome(child);

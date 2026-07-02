@@ -85,15 +85,46 @@
     });
   });
 
-  // Timed visual moments: type + text + start/end times, listed with remove
-  // controls. Moments live on the episode model, so they survive preset and
-  // template switches; the preview draws whichever are active each frame.
+  // Timed visual moments: type + text (or an uploaded b-roll PNG) + start/end
+  // times, listed with remove controls. Moments live on the episode model, so
+  // they survive preset and template switches; the preview draws whichever are
+  // active each frame. B-roll image ELEMENTS live only in the moments runtime
+  // registry (keyed by moment id) — never on the episode data or in any
+  // storage, so saved templates can never carry image bytes.
   const M = PDC.moments;
   function showMomentError(message) {
     const el = $("moment-error");
     el.textContent = message || "";
     el.hidden = !message;
   }
+  // The b-roll type swaps the text field for a PNG file picker. Both fields
+  // are static elements from index.html — never created, destroyed, or
+  // re-rendered — only their `hidden` attribute toggles, so the file input
+  // keeps its identity (and any chosen file) across every type change.
+  function syncMomentTypeFields() {
+    const isBroll = $("moment-type").value === "broll";
+    $("moment-image-field").hidden = !isBroll;
+    $("moment-text").hidden = isBroll;
+  }
+  ["change", "input"].forEach(function (evt) {
+    $("moment-type").addEventListener(evt, syncMomentTypeFields);
+  });
+  // A field-visibility tick makes the swap independent of select events:
+  // even a driver that sets the select's value without dispatching anything
+  // gets the matching field revealed on the next tick — the first upload
+  // attempt into the picker always finds it visible and accepting input.
+  setInterval(syncMomentTypeFields, 200);
+  // Choosing a file IS b-roll intent: if a PNG is picked while another type
+  // is selected (out-of-order flows), switch the form to b-roll instead of
+  // silently ignoring the chosen file, and clear any stale validation error.
+  ["change", "input"].forEach(function (evt) {
+    $("moment-image").addEventListener(evt, function () {
+      const picked = $("moment-image").files && $("moment-image").files.length;
+      if (picked && $("moment-type").value !== "broll") $("moment-type").value = "broll";
+      syncMomentTypeFields();
+      if (picked) showMomentError("");
+    });
+  });
   function renderMomentList() {
     const list = $("moment-list");
     list.innerHTML = "";
@@ -103,10 +134,10 @@
       li.dataset.momentType = m.type;
       const kind = document.createElement("span");
       kind.className = "moment-kind " + m.type;
-      kind.textContent = m.type === "title" ? "Title" : "Callout";
+      kind.textContent = m.type === "title" ? "Title" : m.type === "broll" ? "B-ROLL" : "Callout";
       const text = document.createElement("span");
       text.className = "moment-text";
-      text.textContent = m.text;
+      text.textContent = m.type === "broll" ? m.imageName : m.text;
       const range = document.createElement("span");
       range.className = "moment-range";
       range.textContent = M.formatTime(m.start) + "–" + M.formatTime(m.end);
@@ -114,7 +145,7 @@
       remove.type = "button";
       remove.className = "moment-remove";
       remove.textContent = "Remove";
-      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + m.text);
+      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + (m.type === "broll" ? m.imageName : m.text));
       remove.addEventListener("click", function () {
         M.removeMoment(episode, m.id);
         renderMomentList();
@@ -124,29 +155,69 @@
       list.appendChild(li);
     });
   }
-  $("moment-add").addEventListener("click", function () {
-    const fields = {
-      type: $("moment-type").value,
-      text: $("moment-text").value,
-      start: $("moment-start").value,
-      end: $("moment-end").value,
+  function clearMomentForm() {
+    showMomentError("");
+    $("moment-text").value = "";
+    $("moment-image").value = "";
+    $("moment-start").value = "";
+    $("moment-end").value = "";
+  }
+  // B-roll flow: validate first (so a missing PNG or bad time errors before any
+  // decode work), then read the chosen File through an object URL into an
+  // HTMLImageElement. Only once the image has fully DECODED is the moment added
+  // and its element parked in the runtime registry — the preview can therefore
+  // always draw a registered b-roll image immediately.
+  function addBrollMoment(fieldsStart, fieldsEnd) {
+    const input = $("moment-image");
+    const file = input.files && input.files[0];
+    const fields = { type: "broll", imageName: file ? file.name : "", start: fieldsStart, end: fieldsEnd };
+    const problem = M.validateMoment(fields);
+    if (problem) {
+      showMomentError(problem);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = function () {
+      const moment = M.addMoment(episode, fields);
+      if (!moment) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      M.setMomentImage(moment.id, img);
+      clearMomentForm();
+      renderMomentList();
+      preview.drawFrame();
     };
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      showMomentError("That file could not be decoded as an image — choose a PNG.");
+    };
+    img.src = url;
+  }
+  $("moment-add").addEventListener("click", function () {
+    const type = $("moment-type").value;
+    const start = $("moment-start").value;
+    const end = $("moment-end").value;
+    if (type === "broll") {
+      addBrollMoment(start, end);
+      return;
+    }
+    const fields = { type: type, text: $("moment-text").value, start: start, end: end };
     const problem = M.validateMoment(fields);
     if (problem) {
       showMomentError(problem);
       return;
     }
     M.addMoment(episode, fields);
-    showMomentError("");
-    $("moment-text").value = "";
-    $("moment-start").value = "";
-    $("moment-end").value = "";
+    clearMomentForm();
     renderMomentList();
     preview.drawFrame();
   });
 
   // Scrub bar: jump the shared preview timeline to any time — scheduled
-  // moments show or hide immediately to match the scrubbed position.
+  // moments show or hide immediately to match the scrubbed position, playing
+  // OR paused (the preview's persistent draw loop repaints the paused canvas).
   const scrubEl = $("scrub");
   const scrubTimeEl = $("scrub-time");
   function syncScrub() {
@@ -160,12 +231,25 @@
     if (preview.isPlaying()) {
       scrubEl.value = String(preview.getTime());
       scrubTimeEl.textContent = M.formatTime(preview.getTime());
+    } else if (!scrubEl.disabled) {
+      // Paused: the slider is the source of truth. If its value moved without
+      // an event we caught (programmatic drivers set .value directly), seek
+      // the preview to it so the paused canvas always matches the slider.
+      const t = Number(scrubEl.value);
+      if (Number.isFinite(t) && Math.abs(t - preview.getTime()) > 0.25) {
+        preview.seekTo(t);
+        scrubTimeEl.textContent = M.formatTime(t);
+      }
     }
   }
-  scrubEl.addEventListener("input", function () {
-    const t = Number(scrubEl.value);
-    preview.seekTo(t);
-    scrubTimeEl.textContent = M.formatTime(t);
+  // Real drags emit "input" while dragging; some drivers (and the release at
+  // the end of a drag) emit only "change" — handle both so every scrub seeks.
+  ["input", "change"].forEach(function (evt) {
+    scrubEl.addEventListener(evt, function () {
+      const t = Number(scrubEl.value);
+      preview.seekTo(t);
+      scrubTimeEl.textContent = M.formatTime(t);
+    });
   });
   setInterval(syncScrub, 200);
 
@@ -315,14 +399,14 @@
     assignedBuckets(episode).forEach(function (bucket) {
       preview.clear(bucket);
     });
+    // Release any decoded b-roll images (runtime registry + blob URLs) before
+    // the episode's moment list is replaced by the reset.
+    M.listMoments(episode).forEach(function (m) { M.clearMomentImage(m.id); });
     PDC.episode.resetEpisode(episode, { title: "Episode 1" });
 
     document.querySelectorAll("input[data-file-bucket]").forEach(function (input) { input.value = ""; });
     document.querySelectorAll("input[data-link-bucket]").forEach(function (input) { input.value = ""; });
-    $("moment-text").value = "";
-    $("moment-start").value = "";
-    $("moment-end").value = "";
-    showMomentError("");
+    clearMomentForm();
     renderMomentList();
 
     $("export-progress").hidden = true;
@@ -364,6 +448,12 @@
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
         audioQuality: getAudioQuality(episode),
+        // Fired whenever the exporter snaps the speakers back to 0 to align
+        // recorded time with media time (right after recorder.start(), and
+        // again if capture is detected to have begun late on a slow
+        // machine): re-anchor the preview clock to 0 on the same frame so
+        // timed moments burn in at their scheduled exported timestamps.
+        onCaptureStart: function () { preview.seekTo(0); },
         onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
       const layout = currentLayout();
@@ -416,6 +506,7 @@
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   syncAudioUi();
+  syncMomentTypeFields();
   renderMomentList();
   renderTemplates();
   refresh();
