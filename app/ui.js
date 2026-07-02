@@ -85,15 +85,44 @@
     });
   });
 
-  // Timed visual moments: type + text + start/end times, listed with remove
-  // controls. Moments live on the episode model, so they survive preset and
-  // template switches; the preview draws whichever are active each frame.
+  // Timed visual moments: type + text (or, for b-roll, an uploaded PNG) +
+  // start/end times, listed with remove controls. Moments live on the episode
+  // model, so they survive preset and template switches; the preview draws
+  // whichever are active each frame. A b-roll moment's episode-model record
+  // holds only the image's file name (app/moments.js); the decoded pixels are
+  // registered separately in app/moment-images.js, keyed by moment id.
   const M = PDC.moments;
+  const MOMENT_KIND_LABEL = { title: "Title", callout: "Callout", image: "B-roll" };
   function showMomentError(message) {
     const el = $("moment-error");
     el.textContent = message || "";
     el.hidden = !message;
   }
+
+  // The image field is a single, always-in-DOM input (never recreated) so a
+  // headless driver's file-input handle stays valid across type switches.
+  // Visibility is driven by the selected type, re-synced on a short interval
+  // so a programmatic (event-less) change to the type select still reveals or
+  // hides it. Picking a file first auto-switches the type to "image", so the
+  // upload works on the first attempt regardless of what was selected before.
+  const momentFormEl = $("moment-form");
+  const momentImageInput = $("moment-image");
+  function syncMomentFormVisibility() {
+    const type = $("moment-type").value;
+    momentFormEl.dataset.type = type;
+    const file = momentImageInput.files && momentImageInput.files[0];
+    $("moment-image-name").textContent = type === "image" && file ? file.name : "";
+  }
+  $("moment-type").addEventListener("change", syncMomentFormVisibility);
+  momentImageInput.addEventListener("change", function () {
+    if (momentImageInput.files && momentImageInput.files[0]) {
+      $("moment-type").value = "image";
+    }
+    syncMomentFormVisibility();
+  });
+  setInterval(syncMomentFormVisibility, 200);
+  syncMomentFormVisibility();
+
   function renderMomentList() {
     const list = $("moment-list");
     list.innerHTML = "";
@@ -103,10 +132,10 @@
       li.dataset.momentType = m.type;
       const kind = document.createElement("span");
       kind.className = "moment-kind " + m.type;
-      kind.textContent = m.type === "title" ? "Title" : "Callout";
+      kind.textContent = MOMENT_KIND_LABEL[m.type] || m.type;
       const text = document.createElement("span");
       text.className = "moment-text";
-      text.textContent = m.text;
+      text.textContent = m.type === "image" ? m.imageName : m.text;
       const range = document.createElement("span");
       range.className = "moment-range";
       range.textContent = M.formatTime(m.start) + "–" + M.formatTime(m.end);
@@ -114,9 +143,10 @@
       remove.type = "button";
       remove.className = "moment-remove";
       remove.textContent = "Remove";
-      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + m.text);
+      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + (m.type === "image" ? m.imageName : m.text));
       remove.addEventListener("click", function () {
         M.removeMoment(episode, m.id);
+        PDC.momentImages.release(m.id);
         renderMomentList();
         preview.drawFrame();
       });
@@ -125,9 +155,12 @@
     });
   }
   $("moment-add").addEventListener("click", function () {
+    const type = $("moment-type").value;
+    const imageFile = momentImageInput.files && momentImageInput.files[0];
     const fields = {
-      type: $("moment-type").value,
+      type: type,
       text: $("moment-text").value,
+      imageName: imageFile ? imageFile.name : "",
       start: $("moment-start").value,
       end: $("moment-end").value,
     };
@@ -136,11 +169,18 @@
       showMomentError(problem);
       return;
     }
-    M.addMoment(episode, fields);
+    const moment = M.addMoment(episode, fields);
+    if (type === "image" && imageFile) {
+      PDC.momentImages.register(moment.id, imageFile, function () {
+        preview.drawFrame();
+      });
+    }
     showMomentError("");
     $("moment-text").value = "";
+    momentImageInput.value = "";
     $("moment-start").value = "";
     $("moment-end").value = "";
+    syncMomentFormVisibility();
     renderMomentList();
     preview.drawFrame();
   });
@@ -315,14 +355,22 @@
     assignedBuckets(episode).forEach(function (bucket) {
       preview.clear(bucket);
     });
+    // Release any b-roll images registered for the episode being cleared —
+    // resetEpisode() drops the moments themselves, but the decoded pixels
+    // live outside the model (app/moment-images.js) and would otherwise leak.
+    M.listMoments(episode).forEach(function (m) {
+      PDC.momentImages.release(m.id);
+    });
     PDC.episode.resetEpisode(episode, { title: "Episode 1" });
 
     document.querySelectorAll("input[data-file-bucket]").forEach(function (input) { input.value = ""; });
     document.querySelectorAll("input[data-link-bucket]").forEach(function (input) { input.value = ""; });
     $("moment-text").value = "";
+    momentImageInput.value = "";
     $("moment-start").value = "";
     $("moment-end").value = "";
     showMomentError("");
+    syncMomentFormVisibility();
     renderMomentList();
 
     $("export-progress").hidden = true;

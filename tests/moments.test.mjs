@@ -46,6 +46,23 @@ test("validateMoment requires a type, nonempty text, and 0 <= start < end", () =
   assert.match(M.validateMoment({ type: "title", text: "x", start: 5, end: 2 }), /after/i);
 });
 
+test("validateMoment requires an imageName (not text) for image moments", () => {
+  assert.equal(M.validateMoment({ type: "image", imageName: "broll.png", start: 2, end: 5 }), "");
+  assert.match(M.validateMoment({ type: "image", imageName: "", start: 2, end: 5 }), /image/i);
+  assert.match(M.validateMoment({ type: "image", start: 2, end: 5 }), /image/i);
+  // text is not required for image moments, unlike title/callout
+  assert.equal(M.validateMoment({ type: "image", imageName: "broll.png", text: "", start: 2, end: 5 }), "");
+});
+
+test("addMoment stores an image moment's file name, not raw bytes, and leaves text empty", () => {
+  const ep = E.createEpisode({});
+  const m = M.addMoment(ep, { type: "image", imageName: "  broll.png  ", start: 2, end: 5 });
+  assert.ok(m && m.id, "valid image moment should be added with an id");
+  assert.equal(m.imageName, "broll.png", "image name should be trimmed");
+  assert.equal(m.text, "", "image moments carry no text");
+  assert.equal(JSON.stringify(m).indexOf("data:"), -1, "moment JSON must never carry image bytes");
+});
+
 test("addMoment stores valid moments on the episode and rejects invalid ones", () => {
   const ep = E.createEpisode({});
   const title = M.addMoment(ep, { type: "title", text: "  EP TITLE  ", start: "0:00", end: "0:03" });

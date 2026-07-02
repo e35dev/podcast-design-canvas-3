@@ -304,6 +304,30 @@ body {
   padding: 7px 8px;
   font-size: 13px;
 }
+.moment-image-upload {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.moment-image-upload input[type="file"] { flex: 1; min-width: 0; font-size: 12px; padding: 0; border: none; }
+.moment-image-name {
+  grid-column: span 2;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Only one of the free-text field or the image field applies per moment type. */
+.moment-form[data-type="image"] #moment-text { display: none; }
+.moment-form:not([data-type="image"]) .moment-image-upload,
+.moment-form:not([data-type="image"]) .moment-image-name {
+  display: none;
+}
 .moment-form button {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -340,6 +364,7 @@ body {
 }
 .moment-kind.title { background: rgba(108, 140, 255, 0.55); }
 .moment-kind.callout { background: rgba(138, 108, 255, 0.55); }
+.moment-kind.image { background: rgba(255, 166, 87, 0.55); }
 .moment-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .moment-range { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .moment-remove {

@@ -212,6 +212,36 @@
     );
   }
 
+  // play() resolving does not mean frames are actually advancing yet — headless
+  // decoders can take hundreds of ms to produce the first post-seek frame. The
+  // canvas keeps painting the frozen t=0 frame (and gating moments on t=0) for
+  // that whole gap, so starting the recorder immediately after play() shifts
+  // every burned-in moment later than its scheduled time by that startup lag.
+  // Wait until currentTime actually moves before capture starts, so recorded
+  // wall-clock time and the referenceTime moments are gated on line up.
+  function waitForPlaybackStart(vids) {
+    return Promise.all(
+      vids.map(function (v) {
+        return new Promise(function (resolve) {
+          let done = false;
+          function finish() {
+            if (done) return;
+            done = true;
+            v.removeEventListener("timeupdate", onTick);
+            v.removeEventListener("playing", onTick);
+            resolve();
+          }
+          function onTick() {
+            if (v.currentTime > 0.01) finish();
+          }
+          v.addEventListener("timeupdate", onTick);
+          v.addEventListener("playing", onTick);
+          setTimeout(finish, 1500);
+        });
+      }),
+    );
+  }
+
   // Record the live canvas (and mixed speaker audio) into a downloadable Blob.
   async function exportEpisode(canvasEl, opts) {
     opts = opts || {};
@@ -248,6 +278,10 @@
       // restart them from 0 (bounded) so the capture covers the episode from
       // the top and scheduled visual moments land at their scheduled times.
       await alignSpeakersToStart(vids);
+      // Don't start capturing until playback has actually resumed advancing
+      // past 0 — otherwise the recorded timeline starts counting before the
+      // composed frame does, and every scheduled moment burns in late.
+      await waitForPlaybackStart(vids);
       const canvasStream = canvasEl.captureStream(fps);
       combined = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
       const mimeType = pickMimeType();
