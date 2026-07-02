@@ -59,23 +59,112 @@
     return tap;
   }
 
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function estimateRms(ctx, tap, ms) {
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    const buf = new Float32Array(analyser.fftSize);
+    let sum = 0;
+    let samples = 0;
+    try {
+      tap.gain.connect(analyser);
+      const end = performance.now() + (ms || 520);
+      while (performance.now() < end) {
+        analyser.getFloatTimeDomainData(buf);
+        let frame = 0;
+        for (let i = 0; i < buf.length; i++) frame += buf[i] * buf[i];
+        const rms = Math.sqrt(frame / Math.max(1, buf.length));
+        if (isFinite(rms) && rms > 0) { sum += rms; samples++; }
+        await sleep(55);
+      }
+    } finally {
+      try { tap.gain.disconnect(analyser); } catch (e) {}
+      try { analyser.disconnect(); } catch (e) {}
+    }
+    return samples ? sum / samples : 0;
+  }
+
+  function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+  }
+
+  async function computeLevelingGains(ctx, taps, audioQuality) {
+    const leveling = (audioQuality && audioQuality.leveling) || "balanced";
+    if (leveling === "off" || taps.length < 2) {
+      return taps.map(function () { return 1; });
+    }
+    const levels = [];
+    for (const tap of taps) levels.push(await estimateRms(ctx, tap, 520));
+    const nonZero = levels.filter((v) => v > 0.00001);
+    if (!nonZero.length) return taps.map(function () { return 1; });
+    nonZero.sort(function (a, b) { return a - b; });
+    const target = nonZero[Math.floor(nonZero.length / 2)];
+    const maxBoost = leveling === "strong" ? 3.8 : 2.2;
+    const minGain = leveling === "strong" ? 0.45 : 0.65;
+    return levels.map(function (rms) {
+      if (!rms) return 1;
+      return clamp(target / rms, minGain, maxBoost);
+    });
+  }
+
   // Mix every speaker's audio into one fresh track set for this export, reusing
   // each element's cached tap and rewiring its gain to this export's destination.
-  async function mixSpeakerAudio(vids) {
+  function buildSpeakerChain(ctx, audioQuality, tap, dest, speakerCount, levelingGain) {
+    const q = audioQuality || {};
+    const root = ctx.createGain();
+    root.gain.value = (1 / Math.max(1, speakerCount)) * (levelingGain || 1);
+
+    let current = root;
+    if (q.noiseReduction === "balanced" || q.noiseReduction === "strong") {
+      const hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = q.noiseReduction === "strong" ? 140 : 90;
+      current.connect(hp);
+      current = hp;
+    }
+    if (q.clarity === "balanced" || q.clarity === "enhanced") {
+      const peaking = ctx.createBiquadFilter();
+      peaking.type = "peaking";
+      peaking.frequency.value = 3200;
+      peaking.Q.value = 0.9;
+      peaking.gain.value = q.clarity === "enhanced" ? 4.5 : 2.5;
+      current.connect(peaking);
+      current = peaking;
+    }
+    if (q.leveling === "balanced" || q.leveling === "strong") {
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = q.leveling === "strong" ? -34 : -26;
+      comp.knee.value = q.leveling === "strong" ? 20 : 16;
+      comp.ratio.value = q.leveling === "strong" ? 9 : 5;
+      comp.attack.value = 0.004;
+      comp.release.value = q.leveling === "strong" ? 0.3 : 0.22;
+      current.connect(comp);
+      current = comp;
+    }
+    current.connect(dest);
+    tap.gain.connect(root);
+    return root;
+  }
+
+  async function mixSpeakerAudio(vids, audioQuality) {
     const ctx = await ensureMixContext();
     if (!ctx || !vids.length) return { tracks: [], connectedCount: 0, cleanup: function () {} };
     const dest = ctx.createMediaStreamDestination();
-    const gainValue = 1 / Math.max(1, vids.length);
     let connected = 0;
-    const connectedTaps = [];
+    const connectedNodes = [];
+    const taps = [];
     for (const v of vids) {
       const tap = tapSpeaker(v, ctx);
       if (!tap) continue;
-      tap.gain.gain.value = gainValue;
+      tap.gain.gain.value = 1;
       try { tap.gain.disconnect(); } catch (e) {}
-      tap.gain.connect(dest);
-      connectedTaps.push(tap);
+      taps.push(tap);
       connected++;
+    }
+    const levelingGains = await computeLevelingGains(ctx, taps, audioQuality);
+    for (let i = 0; i < taps.length; i++) {
+      connectedNodes.push(buildSpeakerChain(ctx, audioQuality, taps[i], dest, vids.length, levelingGains[i]));
     }
     if (!connected) {
       dest.stream.getTracks().forEach(function (track) { track.stop(); });
@@ -85,7 +174,12 @@
       tracks: dest.stream.getAudioTracks(),
       connectedCount: connected,
       cleanup: function () {
-        connectedTaps.forEach(function (tap) {
+        connectedNodes.forEach(function (node) {
+          try { node.disconnect(); } catch (e) {}
+        });
+        vids.forEach(function (v) {
+          const tap = speakerTaps.get(v);
+          if (!tap) return;
           try { tap.gain.disconnect(); } catch (e) {}
         });
         dest.stream.getTracks().forEach(function (track) { track.stop(); });
@@ -104,25 +198,22 @@
     // opts.maxSeconds is an explicit override only (not a default cap).
     const recordSeconds = Math.max(1, opts.maxSeconds || longest || 3);
 
+    // A muted <video> feeds silence into Web Audio, so unmute speaker elements
+    // for capture and restore their prior state when done.
+    const restoreMuted = [];
+    for (const v of vids) {
+      restoreMuted.push([v, v.muted]);
+      v.muted = false;
+    }
+
     // Mix each speaker's audio into one track. The tap is created once per element
     // and reused, so a second export in the same session still carries audio.
-    const mixedAudio = await mixSpeakerAudio(vids);
+    const mixedAudio = await mixSpeakerAudio(vids, opts.audioQuality || null);
     const audioTracks = mixedAudio.tracks;
     if (vids.length && (!audioTracks.length || mixedAudio.connectedCount !== vids.length)) {
       mixedAudio.cleanup();
+      for (const [v, wasMuted] of restoreMuted) v.muted = wasMuted;
       throw new Error("Every speaker's audio must be captured before export can finish.");
-    }
-
-    // A muted <video> feeds SILENCE into its Web Audio tap, and the preview keeps
-    // its speakers muted, so unmute the tapped speakers just for the capture. Each
-    // tapped element is rerouted through the audio graph (createMediaElementSource),
-    // so unmuting does NOT play it through the speakers — it only lets real samples
-    // reach the recorded mix. The prior muted state is restored right after.
-    const restoreMuted = [];
-    if (audioTracks.length) {
-      for (const v of vids) {
-        if (speakerTaps.has(v)) { restoreMuted.push([v, v.muted]); v.muted = false; }
-      }
     }
 
     let combined = null;

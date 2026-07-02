@@ -2,7 +2,7 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason } = PDC.episode;
+  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason, setAudioQuality, getAudioQuality } = PDC.episode;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -82,6 +82,32 @@
     }
     ["input", "change"].forEach(function (evt) {
       input.addEventListener(evt, handle);
+    });
+  });
+
+  const audioButtons = Array.from(document.querySelectorAll("button[data-audio-setting]"));
+  const AUDIO_KEYS = ["leveling", "clarity", "noiseReduction"];
+  function syncAudioUi() {
+    const q = getAudioQuality(episode);
+    audioButtons.forEach(function (btn) {
+      const key = btn.getAttribute("data-audio-setting");
+      const value = btn.getAttribute("data-audio-value");
+      const selected = q[key] === value;
+      btn.classList.toggle("selected", selected);
+      btn.setAttribute("aria-pressed", String(selected));
+    });
+  }
+  function handleAudioPick(setting, value) {
+    if (!AUDIO_KEYS.includes(setting)) return;
+    const patch = {};
+    patch[setting] = value;
+    setAudioQuality(episode, patch);
+    syncAudioUi();
+    refresh();
+  }
+  audioButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      handleAudioPick(btn.getAttribute("data-audio-setting"), btn.getAttribute("data-audio-value"));
     });
   });
 
@@ -220,6 +246,7 @@
     try {
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
+        audioQuality: getAudioQuality(episode),
         onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
       const layout = currentLayout();
@@ -230,6 +257,9 @@
       result.innerHTML =
         "Exported <strong>" + fname + "</strong> — " + Math.round(out.bytes / 1024) + " KB, " +
         "“" + layout.name + "” layout. " +
+        "Audio: " + getAudioQuality(episode).leveling + " leveling, " +
+        getAudioQuality(episode).clarity + " clarity, " +
+        getAudioQuality(episode).noiseReduction + " noise reduction. " +
         '<a id="export-download" href="' + out.url + '" download="' + fname + '">Download again</a>';
       // A real playable preview of the exported file (also lets review confirm playback).
       const v = document.createElement("video");
@@ -268,6 +298,7 @@
   }
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
+  syncAudioUi();
   renderTemplates();
   refresh();
 })();

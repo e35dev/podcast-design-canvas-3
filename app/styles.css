@@ -223,6 +223,51 @@ body {
 @media (max-width: 520px) { .templates { grid-template-columns: 1fr; } }
 .preset.template strong::before { content: "✎ "; }
 
+/* Audio quality controls --------------------------------------------------- */
+.audio-quality {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+@media (max-width: 700px) { .audio-quality { grid-template-columns: 1fr; } }
+.audio-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.audio-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.audio-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.audio-option {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10131d;
+  color: var(--ink);
+  font-size: 13px;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+.audio-option:hover {
+  border-color: var(--muted);
+}
+.audio-option.selected,
+.audio-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: rgba(108, 140, 255, 0.17);
+}
+
 /* Custom-layout editor overlay (drag/resize frames over the composed canvas) */
 .edit-overlay { position: absolute; inset: 0; z-index: 5; }
 .edit-overlay[hidden] { display: none; }

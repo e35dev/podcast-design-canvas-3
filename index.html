@@ -65,12 +65,39 @@
         <h2 class="step-title"><span class="num">2</span> Choose a preset or custom layout</h2>
         <div class="presets" id="presets" role="group" aria-label="Preset layouts"></div>
         <div class="templates" id="templates" role="group" aria-label="Saved custom layouts"></div>
+        <h2 class="step-title"><span class="num">3</span> Audio quality</h2>
+        <div class="audio-quality" id="audio-quality">
+          <div class="audio-setting">
+            <span class="audio-label">Leveling</span>
+            <div class="audio-options" role="group" aria-label="Leveling">
+              <button type="button" class="audio-option" data-audio-setting="leveling" data-audio-value="off" aria-pressed="false">Off</button>
+              <button type="button" class="audio-option selected" data-audio-setting="leveling" data-audio-value="balanced" aria-pressed="true">Balanced</button>
+              <button type="button" class="audio-option" data-audio-setting="leveling" data-audio-value="strong" aria-pressed="false">Strong</button>
+            </div>
+          </div>
+          <div class="audio-setting">
+            <span class="audio-label">Voice clarity</span>
+            <div class="audio-options" role="group" aria-label="Voice clarity">
+              <button type="button" class="audio-option" data-audio-setting="clarity" data-audio-value="natural" aria-pressed="false">Natural</button>
+              <button type="button" class="audio-option selected" data-audio-setting="clarity" data-audio-value="balanced" aria-pressed="true">Balanced</button>
+              <button type="button" class="audio-option" data-audio-setting="clarity" data-audio-value="enhanced" aria-pressed="false">Enhanced</button>
+            </div>
+          </div>
+          <div class="audio-setting">
+            <span class="audio-label">Noise reduction</span>
+            <div class="audio-options" role="group" aria-label="Noise reduction">
+              <button type="button" class="audio-option" data-audio-setting="noiseReduction" data-audio-value="off" aria-pressed="false">Off</button>
+              <button type="button" class="audio-option selected" data-audio-setting="noiseReduction" data-audio-value="balanced" aria-pressed="true">Balanced</button>
+              <button type="button" class="audio-option" data-audio-setting="noiseReduction" data-audio-value="strong" aria-pressed="false">Strong</button>
+            </div>
+          </div>
+        </div>
 
         <p class="readiness" id="readiness" role="status"></p>
       </section>
 
       <section class="panel preview" aria-label="Composed preview">
-        <h2 class="step-title"><span class="num">3</span> Preview &amp; customize</h2>
+        <h2 class="step-title"><span class="num">4</span> Preview &amp; customize</h2>
         <div class="stage-wrap">
           <canvas id="stage-canvas" class="stage-canvas" width="1280" height="720" aria-label="Composed episode preview"></canvas>
           <div class="stage-empty" id="empty">
@@ -95,7 +122,7 @@
         <p class="hint" id="customize-hint" hidden>Drag a frame to reposition it, or drag its bottom-right corner to resize. Then save it as a reusable template.</p>
         <div class="export-progress" id="export-progress" hidden><div class="bar" id="export-bar"></div></div>
         <div class="export-result" id="export-result" hidden></div>
-        <p class="scope-note">Shapes, captions, b-roll zones, title elements, overlays, and audio cleanup are intentionally out of scope for this step.</p>
+        <p class="scope-note">Shapes, captions, b-roll zones, title elements, and overlays are intentionally out of scope for this step.</p>
       </section>
     </main>
 
