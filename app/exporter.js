@@ -23,6 +23,75 @@
     );
   }
 
+  // A media element accepts only ONE createMediaElementSource() for its whole
+  // lifetime, so we keep a single page-lifetime AudioContext and tap each speaker
+  // <video> exactly once, caching the node. This is what lets a creator export
+  // the same session more than once without the audio dropping out: earlier code
+  // re-tapped (and closed) a fresh context per export, so the second export threw
+  // InvalidStateError, skipped every speaker, and produced a silent file.
+  let mixCtx = null;
+  const speakerTaps = new WeakMap();
+
+  async function ensureMixContext() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!mixCtx || mixCtx.state === "closed") mixCtx = new AC();
+    if (mixCtx.state === "suspended") { try { await mixCtx.resume(); } catch (e) {} }
+    return mixCtx;
+  }
+
+  // Cached {source, gain} tap for a video, created once. We tap the decoded element
+  // audio via createMediaElementSource (repeatable-safe because it is cached, not
+  // re-created per export). A muted element feeds silence into the tap, so the
+  // caller unmutes each tapped element for the duration of the capture.
+  function tapSpeaker(video, ctx) {
+    let tap = speakerTaps.get(video);
+    if (tap) return tap;
+    try {
+      const source = ctx.createMediaElementSource(video);
+      const gain = ctx.createGain();
+      source.connect(gain);
+      tap = { source, gain };
+      speakerTaps.set(video, tap);
+    } catch (e) {
+      tap = null; // already tapped elsewhere; nothing else we can do for it
+    }
+    return tap;
+  }
+
+  // Mix every speaker's audio into one fresh track set for this export, reusing
+  // each element's cached tap and rewiring its gain to this export's destination.
+  async function mixSpeakerAudio(vids) {
+    const ctx = await ensureMixContext();
+    if (!ctx || !vids.length) return { tracks: [], cleanup: function () {} };
+    const dest = ctx.createMediaStreamDestination();
+    const gainValue = 1 / Math.max(1, vids.length);
+    let connected = 0;
+    const connectedTaps = [];
+    for (const v of vids) {
+      const tap = tapSpeaker(v, ctx);
+      if (!tap) continue;
+      tap.gain.gain.value = gainValue;
+      try { tap.gain.disconnect(); } catch (e) {}
+      tap.gain.connect(dest);
+      connectedTaps.push(tap);
+      connected++;
+    }
+    if (!connected) {
+      dest.stream.getTracks().forEach(function (track) { track.stop(); });
+      return { tracks: [], cleanup: function () {} };
+    }
+    return {
+      tracks: dest.stream.getAudioTracks(),
+      cleanup: function () {
+        connectedTaps.forEach(function (tap) {
+          try { tap.gain.disconnect(); } catch (e) {}
+        });
+        dest.stream.getTracks().forEach(function (track) { track.stop(); });
+      },
+    };
+  }
+
   // Record the live canvas (and mixed speaker audio) into a downloadable Blob.
   async function exportEpisode(canvasEl, opts) {
     opts = opts || {};
@@ -34,55 +103,60 @@
     // opts.maxSeconds is an explicit override only (not a default cap).
     const recordSeconds = Math.max(1, opts.maxSeconds || longest || 3);
 
-    // Best-effort: mix each speaker's audio into one track.
-    let audioTracks = [];
-    let audioCtx = null;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC && vids.length) {
-      try {
-        audioCtx = new AC();
-        if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch (e) {} }
-        const dest = audioCtx.createMediaStreamDestination();
-        let connected = 0;
-        for (const v of vids) {
-          try {
-            const src = audioCtx.createMediaElementSource(v);
-            const gain = audioCtx.createGain();
-            gain.gain.value = 1 / Math.max(1, vids.length);
-            src.connect(gain).connect(dest);
-            connected++;
-          } catch (e) { /* a source can only be tapped once; skip if already tapped */ }
-        }
-        if (connected) audioTracks = dest.stream.getAudioTracks();
-      } catch (e) { audioCtx = null; }
+    // Mix each speaker's audio into one track. The tap is created once per element
+    // and reused, so a second export in the same session still carries audio.
+    const mixedAudio = await mixSpeakerAudio(vids);
+    const audioTracks = mixedAudio.tracks;
+
+    // A muted <video> feeds SILENCE into its Web Audio tap, and the preview keeps
+    // its speakers muted, so unmute the tapped speakers just for the capture. Each
+    // tapped element is rerouted through the audio graph (createMediaElementSource),
+    // so unmuting does NOT play it through the speakers — it only lets real samples
+    // reach the recorded mix. The prior muted state is restored right after.
+    const restoreMuted = [];
+    if (audioTracks.length) {
+      for (const v of vids) {
+        if (speakerTaps.has(v)) { restoreMuted.push([v, v.muted]); v.muted = false; }
+      }
     }
 
-    const canvasStream = canvasEl.captureStream(fps);
-    const combined = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
-    const mimeType = pickMimeType();
-    const chunks = [];
-    const recorder = new MediaRecorder(combined, { mimeType });
-    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    const stopped = new Promise((resolve) => (recorder.onstop = resolve));
+    let combined = null;
+    let recorder = null;
+    try {
+      const canvasStream = canvasEl.captureStream(fps);
+      combined = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+      const mimeType = pickMimeType();
+      const chunks = [];
+      recorder = new MediaRecorder(combined, { mimeType });
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      const stopped = new Promise((resolve) => (recorder.onstop = resolve));
 
-    recorder.start(200);
-    const started = performance.now();
-    const onProgress = opts.onProgress || function () {};
-    await new Promise((resolve) => {
-      const timer = setInterval(() => {
-        const elapsed = (performance.now() - started) / 1000;
-        onProgress(Math.min(1, elapsed / recordSeconds));
-        if (elapsed >= recordSeconds) { clearInterval(timer); resolve(); }
-      }, 100);
-    });
-    try { recorder.requestData(); } catch (e) {}
-    recorder.stop();
-    await stopped;
-    if (audioCtx) { try { await audioCtx.close(); } catch (e) {} }
+      recorder.start(200);
+      const started = performance.now();
+      const onProgress = opts.onProgress || function () {};
+      await new Promise((resolve) => {
+        const timer = setInterval(() => {
+          const elapsed = (performance.now() - started) / 1000;
+          onProgress(Math.min(1, elapsed / recordSeconds));
+          if (elapsed >= recordSeconds) { clearInterval(timer); resolve(); }
+        }, 100);
+      });
+      try { recorder.requestData(); } catch (e) {}
+      recorder.stop();
+      await stopped;
 
-    const blob = new Blob(chunks, { type: mimeType.split(";")[0] });
-    const url = URL.createObjectURL(blob);
-    return { blob, url, bytes: blob.size, mimeType, seconds: recordSeconds };
+      const blob = new Blob(chunks, { type: mimeType.split(";")[0] });
+      const url = URL.createObjectURL(blob);
+      return { blob, url, bytes: blob.size, mimeType, seconds: recordSeconds };
+    } finally {
+      // Restore each speaker's prior muted state even if recording fails.
+      for (const [v, wasMuted] of restoreMuted) { v.muted = wasMuted; }
+      if (recorder && recorder.state !== "inactive") { try { recorder.stop(); } catch (e) {} }
+      if (combined) combined.getTracks().forEach(function (track) { track.stop(); });
+      mixedAudio.cleanup();
+      // NOTE: mixCtx is page-lifetime and intentionally NOT closed here — closing it
+      // would orphan the cached speaker taps and silence every subsequent export.
+    }
   }
 
   function download(url, filename) {

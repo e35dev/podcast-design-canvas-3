@@ -1,13 +1,16 @@
 // scripts/verify-export.mjs
-// Drives the shipped app in headless Chrome and proves the active #53 workflow:
-// upload two generated speaker videos, enter distinct social links, choose a
-// preset, click the real Export action, and confirm a genuinely playable video
-// file is produced from the live canvas composition (loads back into a <video>
-// with real dimensions, and the byte payload is non-trivial). The exported file
-// reflects the selected preset. No fixtures, seeded media, or verifier-only
-// paths: media is generated in-browser, links are typed into the real inputs,
-// and the artifact is read from the product's own download link. Mirrors the
-// CDP harness used by the other rendered checks.
+// Drives the shipped app in headless Chrome and proves the export workflow:
+// upload two generated speaker videos (each carrying an audio track), enter
+// distinct social links, choose a preset, click the real Export action, and
+// confirm a genuinely playable video file is produced from the live canvas
+// composition (loads back into a <video> with real dimensions, non-trivial bytes)
+// that carries AUDIBLE mixed speaker audio. It then re-exports a second time in
+// the same session across a preset switch (no reload / re-upload) and confirms
+// that second file is ALSO playable and still carries non-silent audio — guarding
+// the silent-on-re-export regression (#90/#104). No fixtures, seeded media, or
+// verifier-only paths: media is generated in-browser, links are typed into the
+// real inputs, and each artifact is read from the product's own download link.
+// Mirrors the CDP harness used by the other rendered checks.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -128,29 +131,64 @@ const browserExpression = `
   assert(document.querySelector("#stage-canvas").dataset.preset === "stack", "selected preset should be active before export");
 
   await waitFor(() => !document.querySelector("#export").disabled, "Export action should be enabled after upload + preset");
-  document.querySelector("#export").click();
 
-  // Wait for the real product result (download link + playback element).
-  await waitFor(() => document.querySelector("#export-download") && document.querySelector("#export-playback"), "export should produce a downloadable result", 600);
-  const link = document.querySelector("#export-download");
-  const href = link.getAttribute("href");
-  assert(href && href.indexOf("blob:") === 0, "download link should point at a real blob, not a fake/href-less download");
+  // Click the real Export action, read the produced file from the product's own
+  // download link, and prove it is a genuinely playable video that carries
+  // AUDIBLE (non-silent) mixed speaker audio. The re-export bug produced a second
+  // file with no audio track at all (decodeAudioData throws EncodingError on such
+  // a file), so we decode the audio and confirm a non-zero peak sample.
+  async function runExport(attempt) {
+    const result = document.querySelector("#export-result");
+    result.hidden = true; result.innerHTML = "";
+    await waitFor(() => !document.querySelector("#export").disabled, "attempt " + attempt + ": Export should be enabled");
+    document.querySelector("#export").click();
+    await waitFor(
+      () => document.querySelector("#export-download") && document.querySelector("#export-playback"),
+      "attempt " + attempt + ": export should produce a downloadable result",
+      600,
+    );
+    const link = document.querySelector("#export-download");
+    const href = link.getAttribute("href");
+    assert(href && href.indexOf("blob:") === 0, "attempt " + attempt + ": download link should be a real blob URL");
+    const blob = await (await fetch(href)).blob();
+    assert(blob.size > 2048, "attempt " + attempt + ": exported file should carry real bytes, got " + blob.size);
 
-  // The exported artifact must be a genuinely playable video with real bytes.
-  const resp = await fetch(href);
-  const blob = await resp.blob();
-  assert(blob.size > 2048, "exported file should carry real bytes, got " + blob.size);
-  const v = document.createElement("video");
-  v.muted = true; v.src = URL.createObjectURL(blob);
-  await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
-  assert(v.videoWidth > 0 && v.videoHeight > 0, "exported file should be a playable video with real dimensions");
+    const v = document.createElement("video");
+    v.muted = true; v.src = URL.createObjectURL(blob);
+    await new Promise((r) => { v.onloadedmetadata = r; v.onerror = r; setTimeout(r, 5000); });
+    assert(v.videoWidth > 0 && v.videoHeight > 0, "attempt " + attempt + ": exported file should be a playable video with real dimensions");
+
+    const buf = await blob.arrayBuffer();
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    let peak = 0, samples = 0;
+    try {
+      const decoded = await ac.decodeAudioData(buf.slice(0));
+      samples = decoded.length;
+      for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+        const data = decoded.getChannelData(ch);
+        for (let i = 0; i < data.length; i += 97) { const a = Math.abs(data[i]); if (a > peak) peak = a; }
+      }
+    } catch (e) {
+      throw new Error("attempt " + attempt + ": exported file has no decodable audio track (" + e.name + ") — re-export audio bug");
+    } finally { ac.close(); }
+    assert(samples > 0 && peak > 1e-4, "attempt " + attempt + ": exported audio must be audible (non-silent), peak=" + peak);
+
+    return { bytes: blob.size, dimensions: v.videoWidth + "x" + v.videoHeight, downloadName: link.getAttribute("download"), audioSamples: samples, audioPeak: Number(peak.toFixed(4)) };
+  }
+
+  const first = await runExport(1);
+  // Re-export in the SAME session — without reloading or re-uploading — across a
+  // preset switch. This must still leave export enabled and carry audible audio.
+  document.querySelector('[data-preset="split"]').click();
+  await sleep(200);
+  assert(document.querySelector("#stage-canvas").dataset.preset === "split", "preset switch to split should apply before the second export");
+  const second = await runExport(2);
+  assert(/split/.test(second.downloadName || ""), "second export should reflect the switched (split) layout, got " + second.downloadName);
 
   return {
     presetExported: document.querySelector("#stage-canvas").dataset.preset,
-    bytes: blob.size,
-    type: blob.type,
-    dimensions: v.videoWidth + "x" + v.videoHeight,
-    downloadName: link.getAttribute("download"),
+    firstExport: first,
+    secondExport: second,
   };
 })()
 `;
@@ -172,10 +210,11 @@ async function main() {
     const { ws, ready, send } = connectWebSocket(page.webSocketDebuggerUrl);
     await ready;
     await send("Runtime.enable");
-    const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 40000 });
+    // 60s budget: two full exports (record + decode) plus in-browser media setup.
+    const result = await send("Runtime.evaluate", { expression: browserExpression, awaitPromise: true, returnByValue: true, timeout: 60000 });
     ws.close();
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
-    console.log("verify-export: OK");
+    console.log("verify-export: OK — two consecutive exports both playable and carrying audible audio");
     console.log(JSON.stringify(result.result.value, null, 2));
   } finally {
     await stopChrome(child);
