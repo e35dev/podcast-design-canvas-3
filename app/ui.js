@@ -85,6 +85,90 @@
     });
   });
 
+  // Timed visual moments: type + text + start/end times, listed with remove
+  // controls. Moments live on the episode model, so they survive preset and
+  // template switches; the preview draws whichever are active each frame.
+  const M = PDC.moments;
+  function showMomentError(message) {
+    const el = $("moment-error");
+    el.textContent = message || "";
+    el.hidden = !message;
+  }
+  function renderMomentList() {
+    const list = $("moment-list");
+    list.innerHTML = "";
+    M.listMoments(episode).forEach(function (m) {
+      const li = document.createElement("li");
+      li.dataset.momentId = m.id;
+      li.dataset.momentType = m.type;
+      const kind = document.createElement("span");
+      kind.className = "moment-kind " + m.type;
+      kind.textContent = m.type === "title" ? "Title" : "Callout";
+      const text = document.createElement("span");
+      text.className = "moment-text";
+      text.textContent = m.text;
+      const range = document.createElement("span");
+      range.className = "moment-range";
+      range.textContent = M.formatTime(m.start) + "–" + M.formatTime(m.end);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "moment-remove";
+      remove.textContent = "Remove";
+      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + m.text);
+      remove.addEventListener("click", function () {
+        M.removeMoment(episode, m.id);
+        renderMomentList();
+        preview.drawFrame();
+      });
+      li.append(kind, text, range, remove);
+      list.appendChild(li);
+    });
+  }
+  $("moment-add").addEventListener("click", function () {
+    const fields = {
+      type: $("moment-type").value,
+      text: $("moment-text").value,
+      start: $("moment-start").value,
+      end: $("moment-end").value,
+    };
+    const problem = M.validateMoment(fields);
+    if (problem) {
+      showMomentError(problem);
+      return;
+    }
+    M.addMoment(episode, fields);
+    showMomentError("");
+    $("moment-text").value = "";
+    $("moment-start").value = "";
+    $("moment-end").value = "";
+    renderMomentList();
+    preview.drawFrame();
+  });
+
+  // Scrub bar: jump the shared preview timeline to any time — scheduled
+  // moments show or hide immediately to match the scrubbed position.
+  const scrubEl = $("scrub");
+  const scrubTimeEl = $("scrub-time");
+  function syncScrub() {
+    const duration = preview.getDuration();
+    if (duration > 0) {
+      scrubEl.max = String(Math.round(duration * 10) / 10);
+      scrubEl.disabled = !canCompose(episode);
+    } else {
+      scrubEl.disabled = true;
+    }
+    if (preview.isPlaying()) {
+      scrubEl.value = String(preview.getTime());
+      scrubTimeEl.textContent = M.formatTime(preview.getTime());
+    }
+  }
+  scrubEl.addEventListener("input", function () {
+    const t = Number(scrubEl.value);
+    preview.seekTo(t);
+    scrubTimeEl.textContent = M.formatTime(t);
+  });
+  setInterval(syncScrub, 200);
+
   const audioButtons = Array.from(document.querySelectorAll("button[data-audio-setting]"));
   const AUDIO_KEYS = ["leveling", "clarity", "noiseReduction"];
   function syncAudioUi() {
@@ -299,6 +383,7 @@
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   syncAudioUi();
+  renderMomentList();
   renderTemplates();
   refresh();
 })();

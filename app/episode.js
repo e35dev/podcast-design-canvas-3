@@ -17,6 +17,10 @@
       // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
       presetId: DEFAULT_PRESET_ID,
+      // Timed visual moments (title cards / callouts) scheduled over the episode
+      // timeline — managed by app/moments.js, kept here so they belong to the
+      // episode and survive preset/template switches.
+      moments: [],
       audioQuality: {
         leveling: "balanced",
         clarity: "balanced",

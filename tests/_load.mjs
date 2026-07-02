@@ -10,7 +10,7 @@ import vm from "node:vm";
 
 export function loadPDC(root) {
   globalThis.window = {}; // fresh namespace per load
-  for (const file of ["app/presets.js", "app/episode.js", "app/templates.js"]) {
+  for (const file of ["app/presets.js", "app/episode.js", "app/moments.js", "app/templates.js"]) {
     const code = fs.readFileSync(path.join(root, file), "utf8");
     vm.runInThisContext(code, { filename: file });
   }
