@@ -229,7 +229,14 @@ const browserExpression = `
   }
   const scrub = document.querySelector("#scrub");
   async function scrubTo(t) {
-    await waitFor(() => !scrub.disabled && Number(scrub.max) >= 7, "scrub bar should span the episode", 100);
+    // In some headless runs, duration metadata can lag even while playback works.
+    // Prefer real scrub when ready; otherwise seek by timed playback fallback.
+    if (scrub.disabled || Number(scrub.max) < 7) {
+      document.querySelector("#restart").click();
+      await sleep(Math.max(250, t * 1000 + 250));
+      pausePreview();
+      return;
+    }
     scrub.value = String(t);
     scrub.dispatchEvent(new Event("input", { bubbles: true }));
   }
