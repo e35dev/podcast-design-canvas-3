@@ -171,9 +171,23 @@ const browserExpression = `
     const d = vids.map((v) => v.duration).filter((x) => Number.isFinite(x) && x > 0);
     return d.length ? Math.max(...d) : 0;
   }
+  async function waitForPreviewDuration() {
+    for (let i = 0; i < 200; i++) {
+      const d = duration();
+      if (d > 0) return d;
+      const vids = [...document.querySelectorAll("video[data-speaker]")];
+      for (const v of vids) {
+        if (v.readyState < 1) {
+          // Nudge metadata loading in headless runs where it can lag.
+          try { v.load(); } catch {}
+        }
+      }
+      await sleep(60);
+    }
+    throw new Error("preview duration should be available");
+  }
   async function scrubTo(sec) {
-    const d = duration();
-    assert(d > 0, "preview duration should be available");
+    const d = await waitForPreviewDuration();
     scrub.value = String(Math.max(0, Math.min(1000, Math.round((sec / d) * 1000))));
     scrub.dispatchEvent(new Event("input", { bubbles: true }));
     await sleep(120);
