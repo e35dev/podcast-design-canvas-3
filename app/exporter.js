@@ -187,6 +187,31 @@
     };
   }
 
+  // Re-align every speaker to t=0 immediately before recording starts, so the
+  // recorded timeline matches the episode timeline (timed visual moments must
+  // burn in at their scheduled times, not offset by audio-mix setup). Every
+  // wait here is HARD-BOUNDED by a timer — a stuck seek can never hang export.
+  function alignSpeakersToStart(vids) {
+    return Promise.all(
+      vids.map(function (v) {
+        return new Promise(function (resolve) {
+          let done = false;
+          function finish() {
+            if (done) return;
+            done = true;
+            v.removeEventListener("seeked", finish);
+            const p = v.play();
+            if (p && typeof p.catch === "function") p.catch(function () {});
+            resolve();
+          }
+          v.addEventListener("seeked", finish);
+          setTimeout(finish, 1200);
+          try { v.currentTime = 0; } catch (e) { finish(); }
+        });
+      }),
+    );
+  }
+
   // Record the live canvas (and mixed speaker audio) into a downloadable Blob.
   async function exportEpisode(canvasEl, opts) {
     opts = opts || {};
@@ -219,6 +244,10 @@
     let combined = null;
     let recorder = null;
     try {
+      // Audio-mix setup above takes real time while the speakers keep playing;
+      // restart them from 0 (bounded) so the capture covers the episode from
+      // the top and scheduled visual moments land at their scheduled times.
+      await alignSpeakersToStart(vids);
       const canvasStream = canvasEl.captureStream(fps);
       combined = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
       const mimeType = pickMimeType();

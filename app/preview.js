@@ -66,6 +66,39 @@
       return v;
     }
 
+    // Recorded WebM (e.g. MediaRecorder output) can report Infinity duration
+    // until the element is nudged to its end once. Resolving a real duration
+    // lets the scrub bar span the episode and lets export record a full pass.
+    // Every path here is bounded — a stuck probe-seek can never wedge loading.
+    function normalizeDuration(v, then) {
+      if (isFinite(v.duration)) {
+        then();
+        return;
+      }
+      let done = false;
+      function finish() {
+        if (done) return;
+        done = true;
+        v.removeEventListener("durationchange", onChange);
+        try {
+          v.currentTime = 0;
+        } catch (e) {
+          /* not seekable */
+        }
+        then();
+      }
+      function onChange() {
+        if (isFinite(v.duration)) finish();
+      }
+      v.addEventListener("durationchange", onChange);
+      setTimeout(finish, 3000);
+      try {
+        v.currentTime = 1e7;
+      } catch (e) {
+        finish();
+      }
+    }
+
     function setSource(bucket, file) {
       const v = ensureVideo(bucket);
       if (v.dataset.objectUrl) URL.revokeObjectURL(v.dataset.objectUrl);
@@ -77,17 +110,19 @@
         "loadeddata",
         function seekFirstFrame() {
           v.removeEventListener("loadeddata", seekFirstFrame);
-          try {
-            if (v.currentTime === 0) v.currentTime = Math.max(0, referenceTime);
-          } catch (e) {
-            /* not seekable yet */
-          }
-          alignPlayback(referenceTime);
-          drawFrame();
-          if (playing) {
-            const p = v.play();
-            if (p && typeof p.catch === "function") p.catch(function () {});
-          }
+          normalizeDuration(v, function () {
+            try {
+              if (v.currentTime === 0) v.currentTime = Math.max(0, referenceTime);
+            } catch (e) {
+              /* not seekable yet */
+            }
+            alignPlayback(referenceTime);
+            drawFrame();
+            if (playing) {
+              const p = v.play();
+              if (p && typeof p.catch === "function") p.catch(function () {});
+            }
+          });
         },
         { once: true },
       );
@@ -161,8 +196,67 @@
         }
       });
 
+      drawActiveMoments(w, h);
+
       canvasEl.dataset.preset = episodeRef.presetId;
       canvasEl.dataset.speakers = String(buckets.length);
+    }
+
+    // Timed visual moments are painted straight onto the stage canvas, over the
+    // composed layout, ONLY while the reference playback time is inside their
+    // scheduled [start, end) range. Because export records this same canvas,
+    // whatever is drawn here is burned into the exported video at the same
+    // times. Solid backing bars keep the text legible in screenshots over any
+    // preset (Split / Stack / Spotlight) or custom template.
+    function drawActiveMoments(w, h) {
+      if (!PDC.moments || !episodeRef) return;
+      const active = PDC.moments.activeMoments(episodeRef, referenceTime);
+      if (!active.length) return;
+      ctx.save();
+      ctx.textBaseline = "middle";
+      active.forEach(function (moment) {
+        if (moment.type === "title") drawTitleMoment(moment, w, h);
+        else drawCalloutMoment(moment, w, h);
+      });
+      ctx.restore();
+    }
+
+    // Episode title: a prominent centered bar across the top of the stage with
+    // a dark backing and an accent underline, distinct from speaker labels.
+    function drawTitleMoment(moment, w, h) {
+      const barX = Math.round(w * 0.07);
+      const barY = Math.round(h * 0.055);
+      const barW = w - barX * 2;
+      const barH = Math.round(h * 0.13);
+      ctx.fillStyle = "rgba(5, 7, 12, 0.88)";
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = "#6c8cff";
+      ctx.fillRect(barX, barY + barH - Math.max(3, Math.round(h * 0.006)), barW, Math.max(3, Math.round(h * 0.006)));
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "700 " + Math.round(h * 0.062) + "px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(moment.text, w / 2, barY + barH / 2, barW - Math.round(w * 0.04));
+    }
+
+    // Callout / reference: a lower-third banner anchored left with an accent
+    // edge — visually distinct from the title bar and from speaker name tags.
+    function drawCalloutMoment(moment, w, h) {
+      ctx.font = "600 " + Math.round(h * 0.046) + "px system-ui, sans-serif";
+      const maxTextW = w * 0.7;
+      const textW = Math.min(ctx.measureText(moment.text).width, maxTextW);
+      const edgeW = Math.max(5, Math.round(w * 0.006));
+      const padX = Math.round(w * 0.018);
+      const barX = Math.round(w * 0.045);
+      const barY = Math.round(h * 0.76);
+      const barH = Math.round(h * 0.105);
+      const barW = Math.max(Math.round(textW) + edgeW + padX * 2, Math.round(w * 0.34));
+      ctx.fillStyle = "rgba(8, 10, 16, 0.9)";
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = "#8a6cff";
+      ctx.fillRect(barX, barY, edgeW, barH);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "left";
+      ctx.fillText(moment.text, barX + edgeW + padX, barY + barH / 2, maxTextW);
     }
 
     function loop() {
@@ -236,6 +330,29 @@
       });
     }
 
+    // Longest known speaker duration — the episode timeline the scrubber spans.
+    function getDuration() {
+      let longest = 0;
+      Object.values(videos).forEach(function (v) {
+        if (isFinite(v.duration) && v.duration > longest) longest = v.duration;
+      });
+      return longest;
+    }
+
+    function getTime() {
+      return referenceTime;
+    }
+
+    // Scrub the shared playback timeline to t seconds. Works while playing or
+    // paused; the rAF loop keeps compositing, so timed moments show/hide to
+    // match the new time on the very next drawn frame.
+    function seekTo(t) {
+      if (!Number.isFinite(t) || t < 0) return;
+      referenceTime = t;
+      seekAll(t);
+      drawFrame();
+    }
+
     return {
       setSource,
       clear,
@@ -247,6 +364,9 @@
       isPlaying: function () {
         return playing;
       },
+      getDuration,
+      getTime,
+      seekTo,
       drawFrame,
     };
   }

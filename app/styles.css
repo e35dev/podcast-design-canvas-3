@@ -268,6 +268,79 @@ body {
   background: rgba(108, 140, 255, 0.17);
 }
 
+/* Timed visual moments ------------------------------------------------------ */
+.moments { margin-top: 10px; }
+.moment-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  align-items: center;
+}
+.moment-form select { grid-column: span 2; }
+.moment-form #moment-text { grid-column: span 4; }
+.moment-form #moment-start,
+.moment-form #moment-end,
+.moment-form #moment-add { grid-column: span 2; }
+.moment-form select,
+.moment-form input {
+  min-width: 0;
+  background: #10131d;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 13px;
+}
+.moment-form button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(108, 140, 255, 0.17);
+  border-color: var(--accent);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.moment-form button:hover { background: rgba(108, 140, 255, 0.3); }
+.moment-error { color: #ff8b8b; font-size: 12px; margin: 6px 0 0; min-height: 14px; }
+.moment-error[hidden] { display: none; }
+.moment-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.moment-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+}
+.moment-kind {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  color: #fff;
+}
+.moment-kind.title { background: rgba(108, 140, 255, 0.55); }
+.moment-kind.callout { background: rgba(138, 108, 255, 0.55); }
+.moment-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.moment-range { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.moment-remove {
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer;
+}
+.moment-remove:hover { color: var(--ink); border-color: var(--muted); }
+
+/* Scrub bar under the transport ------------------------------------------- */
+.scrub-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.scrub-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.scrub-row input[type="range"]:disabled { opacity: 0.45; }
+.scrub-time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+
 /* Custom-layout editor overlay (drag/resize frames over the composed canvas) */
 .edit-overlay { position: absolute; inset: 0; z-index: 5; }
 .edit-overlay[hidden] { display: none; }
