@@ -294,6 +294,24 @@ body {
 .moment-form #moment-start,
 .moment-form #moment-end,
 .moment-form #moment-add { grid-column: span 2; }
+/* B-roll image picker: shown only while the "B-roll image" type is selected
+   (the text field hides — a b-roll moment displays an image, not text). */
+.moment-image-field {
+  grid-column: span 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  background: #10131d;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.moment-image-field[hidden] { display: none; }
+.moment-image-field input[type="file"] { flex: 1; min-width: 0; border: 0; padding: 2px 0; font-size: 12px; }
+.moment-kind.broll { background: rgba(255, 108, 200, 0.5); }
 .moment-form select,
 .moment-form input {
   min-width: 0;

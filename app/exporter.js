@@ -212,6 +212,41 @@
     );
   }
 
+  // After the bounded re-seek + play() above, playback does not necessarily
+  // progress right away: on a slow machine the first decoded frame can land
+  // hundreds of ms after play() resolves — and conversely, recorder start-up
+  // can lag while the media races ahead. Either way exported-file time and
+  // media time drift apart and timed visual moments burn in at the wrong
+  // exported timestamps. So wait (HARD-BOUNDED) until every speaker is
+  // verifiably progressing — currentTime past a small epsilon AND strictly
+  // increasing across samples — and only then start recording. If media never
+  // progresses inside the budget we proceed anyway — export must never hang.
+  async function waitForPlaybackProgress(vids, budgetMs) {
+    if (!vids.length) return;
+    const deadline = performance.now() + (budgetMs || 2000);
+    let last = vids.map(function (v) { return v.currentTime; });
+    while (performance.now() < deadline) {
+      await sleep(40);
+      const now = vids.map(function (v) { return v.currentTime; });
+      if (now.every(function (t, i) { return t > 0.03 && t > last[i]; })) return;
+      last = now;
+    }
+  }
+
+  // One repaint of the persistent preview loop (double rAF, hard-bounded by a
+  // timer): guarantees the canvas feeding captureStream has actually drawn a
+  // frame of the restarted timeline before recording begins.
+  function waitForNextPaint() {
+    return new Promise(function (resolve) {
+      let done = false;
+      function fin() { if (done) return; done = true; resolve(); }
+      try {
+        requestAnimationFrame(function () { requestAnimationFrame(fin); });
+      } catch (e) { fin(); }
+      setTimeout(fin, 350);
+    });
+  }
+
   // Record the live canvas (and mixed speaker audio) into a downloadable Blob.
   async function exportEpisode(canvasEl, opts) {
     opts = opts || {};
@@ -244,10 +279,11 @@
     let combined = null;
     let recorder = null;
     try {
-      // Audio-mix setup above takes real time while the speakers keep playing;
-      // restart them from 0 (bounded) so the capture covers the episode from
-      // the top and scheduled visual moments land at their scheduled times.
-      await alignSpeakersToStart(vids);
+      // Build the whole recording pipeline BEFORE re-aligning playback, so
+      // that once the speakers are verifiably rolling from 0 the ONLY step
+      // left is recorder.start() — no setup work (captureStream, recorder
+      // construction) can widen the gap between media time and recorded time
+      // on a slow machine.
       const canvasStream = canvasEl.captureStream(fps);
       combined = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
       const mimeType = pickMimeType();
@@ -255,6 +291,16 @@
       recorder = new MediaRecorder(combined, { mimeType });
       recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
       const stopped = new Promise((resolve) => (recorder.onstop = resolve));
+
+      // Audio-mix setup above takes real time while the speakers keep playing;
+      // restart them from 0 (bounded) so the capture covers the episode from
+      // the top and scheduled visual moments land at their scheduled times.
+      await alignSpeakersToStart(vids);
+      // Gate recorder.start() on real playback progress plus one painted
+      // canvas frame of the restarted timeline (both waits hard-bounded), so
+      // exported-file time tracks media time regardless of machine speed.
+      await waitForPlaybackProgress(vids, 2000);
+      await waitForNextPaint();
 
       recorder.start(200);
       const started = performance.now();

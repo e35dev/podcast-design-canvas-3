@@ -1,5 +1,6 @@
-// app/moments.js — timed visual moments (episode title cards and callout
-// lower-thirds) scheduled over the composed preview. Pure, DOM-free model:
+// app/moments.js — timed visual moments (episode title cards, callout
+// lower-thirds, and b-roll image overlays) scheduled over the composed
+// preview. Pure, DOM-free model:
 // moments live ON THE EPISODE (not on a preset or the preview), so switching
 // Split/Stack/Spotlight or a custom template keeps every scheduled moment
 // attached and rendered over the new layout. The preview draws the active
@@ -9,9 +10,43 @@
 (function () {
   const PDC = (window.PDC = window.PDC || {});
 
-  const MOMENT_TYPES = ["title", "callout"];
-  const TYPE_LABELS = { title: "Episode title", callout: "Callout" };
+  const MOMENT_TYPES = ["title", "callout", "broll"];
+  const TYPE_LABELS = { title: "Episode title", callout: "Callout", broll: "B-roll image" };
   let seq = 0;
+
+  // Runtime registry of decoded b-roll images, keyed by moment id. The image
+  // ELEMENT (and its blob-backed object URL) is deliberately kept OUT of the
+  // episode/moment data: templates persist only geometry (app/templates.js)
+  // and nothing here is ever serialized, so saved templates and any future
+  // storage can never carry image bytes. The model stores only the imageName
+  // label; the UI decodes the uploaded file and parks the element here for
+  // the preview/export renderer to draw while the moment is active.
+  const momentImages = new Map();
+
+  function setMomentImage(id, image) {
+    if (!id || !image) return;
+    momentImages.set(id, image);
+  }
+
+  function getMomentImage(id) {
+    return momentImages.get(id) || null;
+  }
+
+  // Drops a moment's decoded image and best-effort revokes its blob URL so a
+  // removed b-roll cannot leak memory. Safe under plain Node (no-op revoke).
+  function clearMomentImage(id) {
+    const image = momentImages.get(id);
+    momentImages.delete(id);
+    if (!image) return;
+    try {
+      const src = image.src || "";
+      if (src.indexOf("blob:") === 0 && typeof URL !== "undefined" && URL.revokeObjectURL) {
+        URL.revokeObjectURL(src);
+      }
+    } catch (e) {
+      /* revocation is best-effort */
+    }
+  }
 
   function ensureMoments(episode) {
     if (!episode.moments) episode.moments = [];
@@ -42,8 +77,12 @@
   // reason. start/end may be raw strings (seconds or M:SS) or numbers.
   function validateMoment(fields) {
     const f = fields || {};
-    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title or callout).";
-    if (!String(f.text == null ? "" : f.text).trim()) return "Enter the text this moment should display.";
+    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title, callout, or b-roll image).";
+    if (f.type === "broll") {
+      // B-roll moments show an uploaded image instead of text. The UI attaches
+      // the decoded image; the model only requires that an image was chosen.
+      if (!String(f.imageName == null ? "" : f.imageName).trim()) return "Choose a PNG image for this b-roll moment.";
+    } else if (!String(f.text == null ? "" : f.text).trim()) return "Enter the text this moment should display.";
     const start = parseTime(f.start);
     const end = parseTime(f.end);
     if (!Number.isFinite(start)) return "Enter a valid start time (seconds or M:SS).";
@@ -60,10 +99,11 @@
     const moment = {
       id: "moment-" + ++seq,
       type: fields.type,
-      text: String(fields.text).trim(),
+      text: fields.type === "broll" ? "" : String(fields.text).trim(),
       start: parseTime(fields.start),
       end: parseTime(fields.end),
     };
+    if (fields.type === "broll") moment.imageName = String(fields.imageName).trim();
     ensureMoments(episode).push(moment);
     return moment;
   }
@@ -73,6 +113,7 @@
     const index = list.findIndex((m) => m.id === id);
     if (index === -1) return false;
     list.splice(index, 1);
+    clearMomentImage(id);
     return true;
   }
 
@@ -99,5 +140,8 @@
     removeMoment,
     listMoments,
     activeMoments,
+    setMomentImage,
+    getMomentImage,
+    clearMomentImage,
   };
 })();
