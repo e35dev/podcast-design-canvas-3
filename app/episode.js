@@ -17,6 +17,11 @@
       // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
       presetId: DEFAULT_PRESET_ID,
+      audioQuality: {
+        leveling: "balanced",
+        clarity: "balanced",
+        noiseReduction: "balanced",
+      },
     };
   }
 
@@ -49,6 +54,35 @@
 
   function getSocialLink(episode, bucket) {
     return (episode.socialLinks && episode.socialLinks[bucket]) || "";
+  }
+
+  const AUDIO_LEVELING = ["off", "balanced", "strong"];
+  const AUDIO_CLARITY = ["natural", "balanced", "enhanced"];
+  const AUDIO_NOISE_REDUCTION = ["off", "balanced", "strong"];
+
+  function ensureAudioQuality(episode) {
+    if (!episode.audioQuality) {
+      episode.audioQuality = {
+        leveling: "balanced",
+        clarity: "balanced",
+        noiseReduction: "balanced",
+      };
+    }
+    return episode.audioQuality;
+  }
+
+  function setAudioQuality(episode, patch) {
+    const next = ensureAudioQuality(episode);
+    if (!patch || typeof patch !== "object") return episode;
+    if (AUDIO_LEVELING.includes(patch.leveling)) next.leveling = patch.leveling;
+    if (AUDIO_CLARITY.includes(patch.clarity)) next.clarity = patch.clarity;
+    if (AUDIO_NOISE_REDUCTION.includes(patch.noiseReduction)) next.noiseReduction = patch.noiseReduction;
+    return episode;
+  }
+
+  function getAudioQuality(episode) {
+    const q = ensureAudioQuality(episode);
+    return { leveling: q.leveling, clarity: q.clarity, noiseReduction: q.noiseReduction };
   }
 
   // Pull a readable handle out of a social/profile URL (last path segment, or a
@@ -117,6 +151,8 @@
     setPreset,
     setSocialLink,
     getSocialLink,
+    setAudioQuality,
+    getAudioQuality,
     deriveHandle,
     speakerName,
     canCompose,

@@ -108,3 +108,48 @@ test("social links survive a preset switch", () => {
   E.setPreset(ep, "spotlight");
   assert.equal(E.getSocialLink(ep, "host"), "https://x.com/hostperson");
 });
+
+test("audio quality options are stored and validated per episode", () => {
+  const ep = E.createEpisode({});
+  assert.deepEqual(E.getAudioQuality(ep), {
+    leveling: "balanced",
+    clarity: "balanced",
+    noiseReduction: "balanced",
+  });
+  E.setAudioQuality(ep, {
+    leveling: "strong",
+    clarity: "enhanced",
+    noiseReduction: "off",
+  });
+  assert.deepEqual(E.getAudioQuality(ep), {
+    leveling: "strong",
+    clarity: "enhanced",
+    noiseReduction: "off",
+  });
+  E.setAudioQuality(ep, {
+    leveling: "extreme",
+    clarity: "broken",
+    noiseReduction: "ultra",
+  });
+  assert.deepEqual(E.getAudioQuality(ep), {
+    leveling: "strong",
+    clarity: "enhanced",
+    noiseReduction: "off",
+  });
+});
+
+test("audio quality survives preset switches and media updates", () => {
+  const ep = E.createEpisode({});
+  E.assignMedia(ep, "host", media("h.webm"));
+  E.assignMedia(ep, "guest1", media("g.webm"));
+  E.setAudioQuality(ep, { leveling: "off", clarity: "natural", noiseReduction: "strong" });
+  E.setPreset(ep, "stack");
+  E.setPreset(ep, "spotlight");
+  E.clearMedia(ep, "guest1");
+  E.assignMedia(ep, "guest1", media("g2.webm"));
+  assert.deepEqual(E.getAudioQuality(ep), {
+    leveling: "off",
+    clarity: "natural",
+    noiseReduction: "strong",
+  });
+});

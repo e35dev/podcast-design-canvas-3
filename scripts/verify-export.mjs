@@ -124,6 +124,12 @@ const browserExpression = `
   await sleep(1200);
   typeInto(document.querySelector('[data-link-bucket="host"]'), "https://x.com/hostperson");
   typeInto(document.querySelector('[data-link-bucket="guest1"]'), "https://x.com/guestperson");
+  document.querySelector("#audio-leveling").value = "strong";
+  document.querySelector("#audio-leveling").dispatchEvent(new Event("change", { bubbles: true }));
+  document.querySelector("#audio-clarity").value = "enhanced";
+  document.querySelector("#audio-clarity").dispatchEvent(new Event("change", { bubbles: true }));
+  document.querySelector("#audio-noise").value = "strong";
+  document.querySelector("#audio-noise").dispatchEvent(new Event("change", { bubbles: true }));
 
   // Choose a non-default preset so the export reflects the selected composition.
   document.querySelector('[data-preset="stack"]').click();
@@ -148,6 +154,9 @@ const browserExpression = `
       600,
     );
     const link = document.querySelector("#export-download");
+    const txt = (document.querySelector("#export-result") || {}).textContent || "";
+    assert(/strong leveling/i.test(txt) && /enhanced clarity/i.test(txt) && /strong noise reduction/i.test(txt),
+      "attempt " + attempt + ": export result should show persisted audio settings");
     const href = link.getAttribute("href");
     assert(href && href.indexOf("blob:") === 0, "attempt " + attempt + ": download link should be a real blob URL");
     const blob = await (await fetch(href)).blob();
