@@ -10,6 +10,7 @@
   function createPreview(canvasEl) {
     const ctx = canvasEl.getContext("2d");
     const videos = {};
+    const momentImages = {};
     const videoHost = document.createElement("div");
     videoHost.setAttribute("aria-hidden", "true");
     videoHost.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none";
@@ -138,6 +139,28 @@
       delete videos[bucket];
     }
 
+    // Loads the uploaded PNG for a b-roll image moment into a real <img>, keyed
+    // by moment id — mirrors setSource's object-URL pattern for speaker video.
+    // drawImageMoment skips drawing until naturalWidth is available, and the
+    // decode callback forces one redraw so the overlay appears as soon as it's
+    // ready even while paused.
+    function setMomentImage(momentId, file) {
+      const prev = momentImages[momentId];
+      if (prev && prev.objectUrl) URL.revokeObjectURL(prev.objectUrl);
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.addEventListener("load", drawFrame);
+      img.src = url;
+      momentImages[momentId] = { img, objectUrl: url };
+    }
+
+    function clearMomentImage(momentId) {
+      const entry = momentImages[momentId];
+      if (!entry) return;
+      if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+      delete momentImages[momentId];
+    }
+
     function drawFrame() {
       if (!episodeRef) return;
       const buckets = PDC.episode.assignedBuckets(episodeRef);
@@ -216,6 +239,7 @@
       ctx.textBaseline = "middle";
       active.forEach(function (moment) {
         if (moment.type === "title") drawTitleMoment(moment, w, h);
+        else if (moment.type === "image") drawImageMoment(moment, w, h);
         else drawCalloutMoment(moment, w, h);
       });
       ctx.restore();
@@ -257,6 +281,32 @@
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "left";
       ctx.fillText(moment.text, barX + edgeW + padX, barY + barH / 2, maxTextW);
+    }
+
+    // B-roll image: the uploaded PNG, contain-fit inside a fixed centered card
+    // sized to stay clear of the title bar and callout banner so all three
+    // moment types can be scheduled to overlap without occluding each other.
+    // Drawn only once the <img> has real pixels (naturalWidth > 0) — before
+    // that this is a no-op, so a slow-to-decode image never flashes a blank box.
+    function drawImageMoment(moment, w, h) {
+      const entry = momentImages[moment.id];
+      const img = entry && entry.img;
+      if (!img || !img.naturalWidth) return;
+      const boxX = Math.round(w * 0.08);
+      const boxY = Math.round(h * 0.2);
+      const boxW = Math.round(w * 0.84);
+      const boxH = Math.round(h * 0.54);
+      const scale = Math.min(boxW / img.naturalWidth, boxH / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      const dx = boxX + (boxW - dw) / 2;
+      const dy = boxY + (boxH - dh) / 2;
+      ctx.fillStyle = "rgba(5, 7, 12, 0.55)";
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx + 1, dy + 1, dw - 2, dh - 2);
     }
 
     function loop() {
@@ -356,6 +406,8 @@
     return {
       setSource,
       clear,
+      setMomentImage,
+      clearMomentImage,
       render,
       play,
       pause,

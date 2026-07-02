@@ -95,14 +95,16 @@
         </div>
 
         <h2 class="step-title"><span class="num">4</span> Add timed visual moments</h2>
-        <p class="hint">Schedule an episode title or a callout/reference to appear over the composed preview — and the exported video — only during its time range (seconds or M:SS).</p>
+        <p class="hint">Schedule an episode title, a callout/reference, or a b-roll image to appear over the composed preview — and the exported video — only during its time range (seconds or M:SS).</p>
         <div class="moments" id="moments">
           <div class="moment-form">
             <select id="moment-type" aria-label="Moment type">
               <option value="title">Episode title</option>
               <option value="callout">Callout</option>
+              <option value="image">B-roll image</option>
             </select>
             <input id="moment-text" type="text" placeholder="Text to display" aria-label="Moment text" autocomplete="off" />
+            <input id="moment-image" type="file" accept="image/png" aria-label="Moment image (PNG)" hidden />
             <input id="moment-start" type="text" inputmode="numeric" placeholder="Start (0:00)" aria-label="Moment start time" autocomplete="off" />
             <input id="moment-end" type="text" inputmode="numeric" placeholder="End (0:03)" aria-label="Moment end time" autocomplete="off" />
             <button id="moment-add" type="button">+ Add moment</button>

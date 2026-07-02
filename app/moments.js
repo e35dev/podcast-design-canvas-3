@@ -1,5 +1,6 @@
-// app/moments.js — timed visual moments (episode title cards and callout
-// lower-thirds) scheduled over the composed preview. Pure, DOM-free model:
+// app/moments.js — timed visual moments (episode title cards, callout
+// lower-thirds, and b-roll image overlays) scheduled over the composed
+// preview. Pure, DOM-free model:
 // moments live ON THE EPISODE (not on a preset or the preview), so switching
 // Split/Stack/Spotlight or a custom template keeps every scheduled moment
 // attached and rendered over the new layout. The preview draws the active
@@ -9,8 +10,8 @@
 (function () {
   const PDC = (window.PDC = window.PDC || {});
 
-  const MOMENT_TYPES = ["title", "callout"];
-  const TYPE_LABELS = { title: "Episode title", callout: "Callout" };
+  const MOMENT_TYPES = ["title", "callout", "image"];
+  const TYPE_LABELS = { title: "Episode title", callout: "Callout", image: "B-roll image" };
   let seq = 0;
 
   function ensureMoments(episode) {
@@ -38,12 +39,28 @@
     return m + ":" + String(s).padStart(2, "0");
   }
 
+  // A duck-typed check for a File-like object (name/type/size) — avoids
+  // referencing the browser's File global directly so this model stays
+  // loadable under plain Node (tests run it with no DOM/File shim).
+  function isPngFile(value) {
+    if (!value || typeof value !== "object") return false;
+    const mime = value.type || "";
+    const name = value.name || "";
+    if (mime) return mime === "image/png";
+    return /\.png$/i.test(name);
+  }
+
   // "" when the fields describe a valid moment, otherwise a creator-readable
   // reason. start/end may be raw strings (seconds or M:SS) or numbers.
   function validateMoment(fields) {
     const f = fields || {};
-    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title or callout).";
-    if (!String(f.text == null ? "" : f.text).trim()) return "Enter the text this moment should display.";
+    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title, callout, or b-roll image).";
+    if (f.type === "image") {
+      if (!f.image) return "Choose a PNG image to upload for this moment.";
+      if (!isPngFile(f.image)) return "Image overlays must be a PNG file.";
+    } else if (!String(f.text == null ? "" : f.text).trim()) {
+      return "Enter the text this moment should display.";
+    }
     const start = parseTime(f.start);
     const end = parseTime(f.end);
     if (!Number.isFinite(start)) return "Enter a valid start time (seconds or M:SS).";
@@ -54,16 +71,19 @@
   }
 
   // Adds a validated moment to the episode and returns it; returns null when
-  // the fields are invalid (use validateMoment for the reason).
+  // the fields are invalid (use validateMoment for the reason). Image moments
+  // store only a plain descriptor (name) on the model — the loaded pixel data
+  // (the actual <img>) is owned by preview.js, same as speaker video buckets.
   function addMoment(episode, fields) {
     if (validateMoment(fields)) return null;
     const moment = {
       id: "moment-" + ++seq,
       type: fields.type,
-      text: String(fields.text).trim(),
       start: parseTime(fields.start),
       end: parseTime(fields.end),
     };
+    if (fields.type === "image") moment.imageName = fields.image.name || "Image";
+    else moment.text = String(fields.text).trim();
     ensureMoments(episode).push(moment);
     return moment;
   }

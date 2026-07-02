@@ -85,9 +85,10 @@
     });
   });
 
-  // Timed visual moments: type + text + start/end times, listed with remove
-  // controls. Moments live on the episode model, so they survive preset and
-  // template switches; the preview draws whichever are active each frame.
+  // Timed visual moments: type + (text or a PNG upload) + start/end times,
+  // listed with remove controls. Moments live on the episode model, so they
+  // survive preset and template switches; the preview draws whichever are
+  // active each frame.
   const M = PDC.moments;
   function showMomentError(message) {
     const el = $("moment-error");
@@ -103,10 +104,10 @@
       li.dataset.momentType = m.type;
       const kind = document.createElement("span");
       kind.className = "moment-kind " + m.type;
-      kind.textContent = m.type === "title" ? "Title" : "Callout";
+      kind.textContent = M.TYPE_LABELS[m.type] || m.type;
       const text = document.createElement("span");
       text.className = "moment-text";
-      text.textContent = m.text;
+      text.textContent = m.type === "image" ? m.imageName : m.text;
       const range = document.createElement("span");
       range.className = "moment-range";
       range.textContent = M.formatTime(m.start) + "–" + M.formatTime(m.end);
@@ -114,9 +115,10 @@
       remove.type = "button";
       remove.className = "moment-remove";
       remove.textContent = "Remove";
-      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + m.text);
+      remove.setAttribute("aria-label", "Remove " + m.type + " moment " + (m.type === "image" ? m.imageName : m.text));
       remove.addEventListener("click", function () {
         M.removeMoment(episode, m.id);
+        preview.clearMomentImage(m.id);
         renderMomentList();
         preview.drawFrame();
       });
@@ -124,21 +126,36 @@
       list.appendChild(li);
     });
   }
+  // The text field is for title/callout copy; the file field is for the
+  // b-roll PNG. Only one is relevant per moment type, so toggle visibility
+  // instead of growing the form.
+  function syncMomentFields() {
+    const isImage = $("moment-type").value === "image";
+    $("moment-text").hidden = isImage;
+    $("moment-image").hidden = !isImage;
+  }
+  $("moment-type").addEventListener("change", syncMomentFields);
+  syncMomentFields();
+
   $("moment-add").addEventListener("click", function () {
+    const type = $("moment-type").value;
     const fields = {
-      type: $("moment-type").value,
+      type: type,
       text: $("moment-text").value,
       start: $("moment-start").value,
       end: $("moment-end").value,
     };
+    if (type === "image") fields.image = $("moment-image").files[0] || null;
     const problem = M.validateMoment(fields);
     if (problem) {
       showMomentError(problem);
       return;
     }
-    M.addMoment(episode, fields);
+    const moment = M.addMoment(episode, fields);
+    if (type === "image") preview.setMomentImage(moment.id, fields.image);
     showMomentError("");
     $("moment-text").value = "";
+    $("moment-image").value = "";
     $("moment-start").value = "";
     $("moment-end").value = "";
     renderMomentList();

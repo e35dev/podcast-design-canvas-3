@@ -46,6 +46,40 @@ test("validateMoment requires a type, nonempty text, and 0 <= start < end", () =
   assert.match(M.validateMoment({ type: "title", text: "x", start: 5, end: 2 }), /after/i);
 });
 
+test("validateMoment requires a PNG image for the image type, not text", () => {
+  assert.match(M.validateMoment({ type: "image", start: 0, end: 1 }), /image/i);
+  assert.match(
+    M.validateMoment({ type: "image", image: { name: "cover.jpg", type: "image/jpeg" }, start: 0, end: 1 }),
+    /png/i,
+  );
+  assert.equal(
+    M.validateMoment({ type: "image", image: { name: "cover.png", type: "image/png" }, start: 0, end: 1 }),
+    "",
+  );
+  // Duck-typed: accepts anything File-like (name ending .png) without a real File global.
+  assert.equal(M.validateMoment({ type: "image", image: { name: "cover.png" }, start: 0, end: 1 }), "");
+});
+
+test("addMoment stores an image moment's file name, not text", () => {
+  const ep = E.createEpisode({});
+  const m = M.addMoment(ep, { type: "image", image: { name: "broll.png", type: "image/png" }, start: "0:01", end: "0:04" });
+  assert.ok(m && m.id, "valid image moment should be added with an id");
+  assert.equal(m.imageName, "broll.png");
+  assert.equal(m.text, undefined, "image moments do not carry a text field");
+  assert.equal(m.start, 1);
+  assert.equal(m.end, 4);
+});
+
+test("activeMoments treats image moments the same as other types for [start, end) scheduling", () => {
+  const ep = E.createEpisode({});
+  M.addMoment(ep, { type: "image", image: { name: "broll.png", type: "image/png" }, start: 2, end: 5 });
+  const typesAt = (t) => M.activeMoments(ep, t).map((m) => m.type);
+  assert.deepEqual(typesAt(1.9), []);
+  assert.deepEqual(typesAt(2), ["image"]);
+  assert.deepEqual(typesAt(4.9), ["image"]);
+  assert.deepEqual(typesAt(5), []);
+});
+
 test("addMoment stores valid moments on the episode and rejects invalid ones", () => {
   const ep = E.createEpisode({});
   const title = M.addMoment(ep, { type: "title", text: "  EP TITLE  ", start: "0:00", end: "0:03" });

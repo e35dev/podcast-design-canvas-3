@@ -290,7 +290,8 @@ body {
   align-items: center;
 }
 .moment-form select { grid-column: span 2; }
-.moment-form #moment-text { grid-column: span 4; }
+.moment-form #moment-text,
+.moment-form #moment-image { grid-column: span 4; }
 .moment-form #moment-start,
 .moment-form #moment-end,
 .moment-form #moment-add { grid-column: span 2; }
@@ -304,6 +305,8 @@ body {
   padding: 7px 8px;
   font-size: 13px;
 }
+.moment-form input[type="file"] { padding: 5px 8px; }
+.moment-form input[hidden] { display: none; }
 .moment-form button {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -340,6 +343,7 @@ body {
 }
 .moment-kind.title { background: rgba(108, 140, 255, 0.55); }
 .moment-kind.callout { background: rgba(138, 108, 255, 0.55); }
+.moment-kind.image { background: rgba(16, 185, 129, 0.55); }
 .moment-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .moment-range { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .moment-remove {
