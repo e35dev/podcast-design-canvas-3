@@ -1,16 +1,20 @@
-// app/moments.js — timed visual moments (episode title cards and callout
-// lower-thirds) scheduled over the composed preview. Pure, DOM-free model:
-// moments live ON THE EPISODE (not on a preset or the preview), so switching
-// Split/Stack/Spotlight or a custom template keeps every scheduled moment
-// attached and rendered over the new layout. The preview draws the active
-// moments straight onto the stage canvas each frame, and because export
-// records that same canvas, the moments are burned into the exported video at
-// the same scheduled times. Classic script — exposed on window.PDC.moments.
+// app/moments.js — timed visual moments (episode title cards, callout
+// lower-thirds, and b-roll image overlays) scheduled over the composed
+// preview. Pure, DOM-free model: moments live ON THE EPISODE (not on a preset
+// or the preview), so switching Split/Stack/Spotlight or a custom template
+// keeps every scheduled moment attached and rendered over the new layout. An
+// "image" moment carries only its source file's NAME here — the decoded pixels
+// live in the browser-only app/moment-images.js registry, keyed by moment id,
+// so episode data (and anything saved from it, like templates/localStorage)
+// never carries image bytes. The preview draws the active moments straight
+// onto the stage canvas each frame, and because export records that same
+// canvas, the moments are burned into the exported video at the same
+// scheduled times. Classic script — exposed on window.PDC.moments.
 (function () {
   const PDC = (window.PDC = window.PDC || {});
 
-  const MOMENT_TYPES = ["title", "callout"];
-  const TYPE_LABELS = { title: "Episode title", callout: "Callout" };
+  const MOMENT_TYPES = ["title", "callout", "image"];
+  const TYPE_LABELS = { title: "Episode title", callout: "Callout", image: "B-roll image" };
   let seq = 0;
 
   function ensureMoments(episode) {
@@ -39,11 +43,17 @@
   }
 
   // "" when the fields describe a valid moment, otherwise a creator-readable
-  // reason. start/end may be raw strings (seconds or M:SS) or numbers.
+  // reason. start/end may be raw strings (seconds or M:SS) or numbers. An
+  // "image" moment needs an imageName (the decoded pixels are registered
+  // separately, in the browser, once the file is read) instead of text.
   function validateMoment(fields) {
     const f = fields || {};
-    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title or callout).";
-    if (!String(f.text == null ? "" : f.text).trim()) return "Enter the text this moment should display.";
+    if (!MOMENT_TYPES.includes(f.type)) return "Choose a moment type (title, callout, or B-roll image).";
+    if (f.type === "image") {
+      if (!String(f.imageName == null ? "" : f.imageName).trim()) return "Choose a PNG image for this b-roll moment.";
+    } else if (!String(f.text == null ? "" : f.text).trim()) {
+      return "Enter the text this moment should display.";
+    }
     const start = parseTime(f.start);
     const end = parseTime(f.end);
     if (!Number.isFinite(start)) return "Enter a valid start time (seconds or M:SS).";
@@ -60,10 +70,11 @@
     const moment = {
       id: "moment-" + ++seq,
       type: fields.type,
-      text: String(fields.text).trim(),
+      text: fields.type === "image" ? "" : String(fields.text).trim(),
       start: parseTime(fields.start),
       end: parseTime(fields.end),
     };
+    if (fields.type === "image") moment.imageName = String(fields.imageName).trim();
     ensureMoments(episode).push(moment);
     return moment;
   }

@@ -216,6 +216,7 @@
       ctx.textBaseline = "middle";
       active.forEach(function (moment) {
         if (moment.type === "title") drawTitleMoment(moment, w, h);
+        else if (moment.type === "image") drawImageMoment(moment, w, h);
         else drawCalloutMoment(moment, w, h);
       });
       ctx.restore();
@@ -257,6 +258,32 @@
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "left";
       ctx.fillText(moment.text, barX + edgeW + padX, barY + barH / 2, maxTextW);
+    }
+
+    // B-roll image: an aspect-preserved, centered inset with a dark backing
+    // and a light border — the same "solid block over the stage" pattern as
+    // the title/callout bars, so it reads clearly over any preset and export
+    // burn-in is automatic. The decoded pixels live in the browser-only
+    // app/moment-images.js registry (keyed by moment id), never on the
+    // episode model; while a file is still decoding (or failed) nothing is
+    // drawn, so an in-flight upload can't flash a stale or blank frame.
+    function drawImageMoment(moment, w, h) {
+      const img = PDC.momentImages && PDC.momentImages.get(moment.id);
+      if (!img || !img.naturalWidth || !img.naturalHeight) return;
+      const insetW = w * 0.46;
+      const insetH = h * 0.46;
+      const boxX = (w - insetW) / 2;
+      const boxY = (h - insetH) / 2;
+      ctx.fillStyle = "rgba(5, 7, 12, 0.9)";
+      ctx.fillRect(boxX, boxY, insetW, insetH);
+      const pad = Math.round(w * 0.012);
+      const scale = Math.min((insetW - pad * 2) / img.naturalWidth, (insetH - pad * 2) / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      ctx.drawImage(img, boxX + (insetW - dw) / 2, boxY + (insetH - dh) / 2, dw, dh);
+      ctx.strokeStyle = "rgba(255,255,255,0.88)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(boxX + 1.5, boxY + 1.5, insetW - 3, insetH - 3);
     }
 
     function loop() {
