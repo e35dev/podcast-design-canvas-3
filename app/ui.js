@@ -2,7 +2,19 @@
 (function () {
   const PDC = window.PDC;
   const { PRESETS, BUCKET_LABELS, SPEAKER_BUCKETS } = PDC.presets;
-  const { createEpisode, assignMedia, clearMedia, assignedBuckets, setPreset, setSocialLink, speakerName, canCompose, readinessReason } = PDC.episode;
+  const {
+    createEpisode,
+    assignMedia,
+    clearMedia,
+    assignedBuckets,
+    setPreset,
+    setAudioQuality,
+    getAudioQuality,
+    setSocialLink,
+    speakerName,
+    canCompose,
+    readinessReason,
+  } = PDC.episode;
 
   const $ = function (id) {
     return document.getElementById(id);
@@ -83,6 +95,46 @@
     ["input", "change"].forEach(function (evt) {
       input.addEventListener(evt, handle);
     });
+  });
+
+  const AUDIO_LABELS = {
+    clarity: { natural: "Natural voices", clear: "Clear voices", bright: "Bright voices" },
+    noiseReduction: { off: "No noise reduction", gentle: "Gentle noise reduction", strong: "Strong noise reduction" },
+  };
+
+  function audioQualitySummary(quality) {
+    quality = quality || getAudioQuality(episode);
+    const parts = [
+      quality.leveling ? "Balanced loudness" : "Original loudness",
+      AUDIO_LABELS.clarity[quality.clarity] || AUDIO_LABELS.clarity.natural,
+      AUDIO_LABELS.noiseReduction[quality.noiseReduction] || AUDIO_LABELS.noiseReduction.off,
+    ];
+    return parts.join(" · ");
+  }
+
+  function syncAudioQualityControls() {
+    const quality = getAudioQuality(episode);
+    const leveling = $("audio-leveling");
+    const clarity = $("audio-clarity");
+    const noiseReduction = $("audio-noise-reduction");
+    if (leveling) leveling.checked = !!quality.leveling;
+    if (clarity) clarity.value = quality.clarity;
+    if (noiseReduction) noiseReduction.value = quality.noiseReduction;
+    if ($("audio-quality-summary")) $("audio-quality-summary").textContent = audioQualitySummary(quality);
+  }
+
+  document.querySelectorAll("[data-audio-quality]").forEach(function (control) {
+    const key = control.getAttribute("data-audio-quality");
+    function handleAudioQuality() {
+      const value = control.type === "checkbox" ? control.checked : control.value;
+      const patch = {};
+      patch[key] = value;
+      setAudioQuality(episode, patch);
+      syncAudioQualityControls();
+      refresh();
+    }
+    control.addEventListener("change", handleAudioQuality);
+    control.addEventListener("input", handleAudioQuality);
   });
 
   const presetsEl = $("presets");
@@ -217,9 +269,11 @@
     preview.play(); // ensure the canvas is composing live frames while we capture
     $("export-progress").hidden = false;
     $("export-result").hidden = true;
+    const audioQuality = getAudioQuality(episode);
     try {
       const out = await PDC.exporter.exportEpisode($("stage-canvas"), {
         fps: 30,
+        audioQuality,
         onProgress: function (p) { $("export-bar").style.width = Math.round(p * 100) + "%"; },
       });
       const layout = currentLayout();
@@ -230,6 +284,7 @@
       result.innerHTML =
         "Exported <strong>" + fname + "</strong> — " + Math.round(out.bytes / 1024) + " KB, " +
         "“" + layout.name + "” layout. " +
+        "Audio: " + audioQualitySummary(audioQuality) + ". " +
         '<a id="export-download" href="' + out.url + '" download="' + fname + '">Download again</a>';
       // A real playable preview of the exported file (also lets review confirm playback).
       const v = document.createElement("video");
@@ -269,5 +324,6 @@
 
   SPEAKER_BUCKETS.forEach(updateBucketRow);
   renderTemplates();
+  syncAudioQualityControls();
   refresh();
 })();

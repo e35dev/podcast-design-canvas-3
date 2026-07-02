@@ -40,6 +40,15 @@
     return mixCtx;
   }
 
+  function normalizeAudioQuality(raw) {
+    raw = raw || {};
+    return {
+      leveling: raw.leveling === true,
+      clarity: ["natural", "clear", "bright"].includes(raw.clarity) ? raw.clarity : "natural",
+      noiseReduction: ["off", "gentle", "strong"].includes(raw.noiseReduction) ? raw.noiseReduction : "off",
+    };
+  }
+
   // Cached {source, gain} tap for a video, created once. We tap the decoded element
   // audio via createMediaElementSource (repeatable-safe because it is cached, not
   // re-created per export). A muted element feeds silence into the tap, so the
@@ -59,22 +68,77 @@
     return tap;
   }
 
+  function connectProcessedSpeaker(ctx, tap, dest, quality, mixGainValue) {
+    const nodes = [];
+    let tail = tap.gain;
+    tap.gain.gain.value = 1;
+    try { tap.gain.disconnect(); } catch (e) {}
+
+    function append(node) {
+      tail.connect(node);
+      nodes.push(node);
+      tail = node;
+    }
+
+    if (quality.noiseReduction !== "off") {
+      const highpass = ctx.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.value = quality.noiseReduction === "strong" ? 140 : 90;
+      highpass.Q.value = 0.7;
+      append(highpass);
+
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.value = quality.noiseReduction === "strong" ? 5200 : 7200;
+      lowpass.Q.value = 0.7;
+      append(lowpass);
+    }
+
+    if (quality.clarity !== "natural") {
+      const presence = ctx.createBiquadFilter();
+      presence.type = "peaking";
+      presence.frequency.value = quality.clarity === "bright" ? 3200 : 2400;
+      presence.Q.value = 1.1;
+      presence.gain.value = quality.clarity === "bright" ? 5 : 3;
+      append(presence);
+    }
+
+    if (quality.leveling) {
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -34;
+      compressor.knee.value = 10;
+      compressor.ratio.value = 12;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.18;
+      append(compressor);
+
+      const makeup = ctx.createGain();
+      makeup.gain.value = 5.5;
+      append(makeup);
+    }
+
+    const mixGain = ctx.createGain();
+    mixGain.gain.value = mixGainValue;
+    append(mixGain);
+    tail.connect(dest);
+    return nodes;
+  }
+
   // Mix every speaker's audio into one fresh track set for this export, reusing
   // each element's cached tap and rewiring its gain to this export's destination.
-  async function mixSpeakerAudio(vids) {
+  async function mixSpeakerAudio(vids, audioQuality) {
     const ctx = await ensureMixContext();
     if (!ctx || !vids.length) return { tracks: [], connectedCount: 0, cleanup: function () {} };
+    const quality = normalizeAudioQuality(audioQuality);
     const dest = ctx.createMediaStreamDestination();
     const gainValue = 1 / Math.max(1, vids.length);
     let connected = 0;
-    const connectedTaps = [];
+    const connections = [];
     for (const v of vids) {
       const tap = tapSpeaker(v, ctx);
       if (!tap) continue;
-      tap.gain.gain.value = gainValue;
-      try { tap.gain.disconnect(); } catch (e) {}
-      tap.gain.connect(dest);
-      connectedTaps.push(tap);
+      const nodes = connectProcessedSpeaker(ctx, tap, dest, quality, gainValue);
+      connections.push({ tap, nodes });
       connected++;
     }
     if (!connected) {
@@ -85,8 +149,11 @@
       tracks: dest.stream.getAudioTracks(),
       connectedCount: connected,
       cleanup: function () {
-        connectedTaps.forEach(function (tap) {
-          try { tap.gain.disconnect(); } catch (e) {}
+        connections.forEach(function (connection) {
+          try { connection.tap.gain.disconnect(); } catch (e) {}
+          connection.nodes.forEach(function (node) {
+            try { node.disconnect(); } catch (e) {}
+          });
         });
         dest.stream.getTracks().forEach(function (track) { track.stop(); });
       },
@@ -106,7 +173,7 @@
 
     // Mix each speaker's audio into one track. The tap is created once per element
     // and reused, so a second export in the same session still carries audio.
-    const mixedAudio = await mixSpeakerAudio(vids);
+    const mixedAudio = await mixSpeakerAudio(vids, opts.audioQuality);
     const audioTracks = mixedAudio.tracks;
     if (vids.length && (!audioTracks.length || mixedAudio.connectedCount !== vids.length)) {
       mixedAudio.cleanup();

@@ -6,6 +6,26 @@
 (function () {
   const PDC = (window.PDC = window.PDC || {});
   const { SPEAKER_BUCKETS, DEFAULT_PRESET_ID, getPreset } = PDC.presets;
+  const DEFAULT_AUDIO_QUALITY = {
+    leveling: false,
+    clarity: "natural",
+    noiseReduction: "off",
+  };
+  const CLARITY_OPTIONS = ["natural", "clear", "bright"];
+  const NOISE_REDUCTION_OPTIONS = ["off", "gentle", "strong"];
+
+  function normalizeAudioQuality(raw) {
+    raw = raw || {};
+    const clarity = CLARITY_OPTIONS.includes(raw.clarity) ? raw.clarity : DEFAULT_AUDIO_QUALITY.clarity;
+    const noiseReduction = NOISE_REDUCTION_OPTIONS.includes(raw.noiseReduction)
+      ? raw.noiseReduction
+      : DEFAULT_AUDIO_QUALITY.noiseReduction;
+    return {
+      leveling: raw.leveling === true,
+      clarity,
+      noiseReduction,
+    };
+  }
 
   function createEpisode(init) {
     return {
@@ -16,6 +36,7 @@
       // bucket -> social/profile URL string entered during setup, kept per
       // speaker so later steps can derive names/topics/references from it.
       socialLinks: {},
+      audioQuality: normalizeAudioQuality(init && init.audioQuality),
       presetId: DEFAULT_PRESET_ID,
     };
   }
@@ -89,6 +110,15 @@
     return episode;
   }
 
+  function getAudioQuality(episode) {
+    return normalizeAudioQuality(episode && episode.audioQuality);
+  }
+
+  function setAudioQuality(episode, patch) {
+    episode.audioQuality = normalizeAudioQuality(Object.assign({}, getAudioQuality(episode), patch || {}));
+    return episode;
+  }
+
   // The product needs at least two speakers and a valid preset before it can
   // compose a meaningful preview. This is the single source of truth for the
   // "ready to preview" state — the UI never invents its own gate.
@@ -115,6 +145,9 @@
     clearMedia,
     assignedBuckets,
     setPreset,
+    setAudioQuality,
+    getAudioQuality,
+    DEFAULT_AUDIO_QUALITY,
     setSocialLink,
     getSocialLink,
     deriveHandle,

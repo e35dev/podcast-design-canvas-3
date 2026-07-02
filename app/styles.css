@@ -181,6 +181,43 @@ body {
 
 .readiness { margin-top: 14px; color: var(--muted); font-size: 13px; min-height: 18px; }
 
+/* Audio quality ----------------------------------------------------------- */
+.audio-quality {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.audio-toggle,
+.audio-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 13px;
+}
+.audio-toggle { justify-content: flex-start; }
+.audio-toggle input { accent-color: var(--accent); }
+.audio-select span { color: var(--muted); }
+.audio-select select {
+  min-width: 120px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10131d;
+  color: var(--ink);
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.audio-summary {
+  margin: 2px 0 0;
+  color: var(--ok);
+  min-height: 16px;
+  font-size: 12px;
+}
+
 /* Stage / composed preview ------------------------------------------------ */
 .stage-wrap { position: relative; }
 .stage-canvas {

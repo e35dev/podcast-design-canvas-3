@@ -15,6 +15,7 @@ test("new episode starts empty with the default preset", () => {
   const ep = E.createEpisode({ title: "Ep 1" });
   assert.equal(ep.title, "Ep 1");
   assert.equal(ep.presetId, PDC.presets.DEFAULT_PRESET_ID);
+  assert.deepEqual(E.getAudioQuality(ep), E.DEFAULT_AUDIO_QUALITY);
   assert.deepEqual(E.assignedBuckets(ep), []);
   assert.equal(E.canCompose(ep), false);
 });
@@ -107,4 +108,14 @@ test("social links survive a preset switch", () => {
   E.setSocialLink(ep, "host", "https://x.com/hostperson");
   E.setPreset(ep, "spotlight");
   assert.equal(E.getSocialLink(ep, "host"), "https://x.com/hostperson");
+});
+
+test("audio quality settings are validated and survive a preset switch", () => {
+  const ep = E.createEpisode({});
+  E.setAudioQuality(ep, { leveling: true, clarity: "clear", noiseReduction: "gentle" });
+  assert.deepEqual(E.getAudioQuality(ep), { leveling: true, clarity: "clear", noiseReduction: "gentle" });
+  E.setPreset(ep, "spotlight");
+  assert.deepEqual(E.getAudioQuality(ep), { leveling: true, clarity: "clear", noiseReduction: "gentle" });
+  E.setAudioQuality(ep, { clarity: "studio-secret", noiseReduction: "magic" });
+  assert.deepEqual(E.getAudioQuality(ep), { leveling: true, clarity: "natural", noiseReduction: "off" });
 });
